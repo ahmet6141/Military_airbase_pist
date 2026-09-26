@@ -203,6 +203,7 @@ class _TempScene:
         self.objects: list[bpy.types.Object] = []
         self.meshes: list[bpy.types.Mesh] = []
         self.used_names: set[str] = set()
+        self.renamed: list[tuple[str, str]] = []      # (wanted, used) when a scene object already had the name
 
     def own(self, me: bpy.types.Mesh) -> bpy.types.Mesh:
         self.meshes.append(me)
@@ -216,6 +217,8 @@ class _TempScene:
         while name in self.used_names or name in bpy.data.objects:
             name = f"{base}_{n}"
             n += 1
+        if name != base:
+            self.renamed.append((base, name))
         self.used_names.add(name)
         return name
 
@@ -863,6 +866,8 @@ def export_base(context, root: bpy.types.Object, directory: str | None = None, s
     retarget: dict[bpy.types.Image, str] = {}
     try:
         items = build_export_set(context, root, objects, settings, tmp, warnings, scale=100.0 if scale_cm else 1.0)
+        for wanted, used in tmp.renamed:
+            warnings.append(f"name clash: an object '{wanted}' already exists in the file, exported as '{used}'")
         for it in items:
             if it.ob.name != it.name:
                 warnings.append(f"name clash: '{it.name}' exported as '{it.ob.name}'")
