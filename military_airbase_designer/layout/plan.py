@@ -749,20 +749,22 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
         size = HAS_SIZE.get(s.structures.has_style, HAS_SIZE['NATO3'])
         perim = g.polyline_length(loop_cl, closed=True)
         # place shelters on the OUTER side of the loop, spaced evenly, skipping the access side
-        step = perim / shelters
+        step = perim / (shelters * 1.4)     # ~30 % of the loop (the taxiway side) is skipped
         pts = g.resample_polyline(loop_cl, step, closed=True)
         placed = 0
         # UFC 3-260-01 Table 5-1: taxiway CL to fixed obstacle >= 61 m (200 ft) -> shelter front edge at 61 m
         clearance = ft(200)
         stub_len = clearance + size[0] * 0.5
-        for i in range(shelters * 2):
+        for i in range(int(shelters * 1.4) + 2):
             if placed >= shelters:
                 break
             q, tang = g.point_along(loop_cl + [loop_cl[0]], (step * i + step * 0.5) % perim)
             outward = g.perp_left(tang)
             if g.dot(outward, (q[0] - cx, q[1] - cy)) < 0:
                 outward = (-outward[0], -outward[1])
-            # keep the access side clear
+            # never on the side facing the parallel taxiway (shelters would intrude on it); keep the access side clear
+            if g.dot(outward, (0.0, float(side))) < -0.3:
+                continue
             if abs(q[0] - cx) < ft(80) and (q[1] - near) * side < ft(120):
                 continue
             # alternate +-30 deg facing for dispersal (real NATO loops stagger shelter headings)
