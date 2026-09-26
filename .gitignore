@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.blend1
+*.blend@
+/build/
+/dist/
+/textures_out/
+/tests/_out/
+.venv/
+venv/
+.DS_Store

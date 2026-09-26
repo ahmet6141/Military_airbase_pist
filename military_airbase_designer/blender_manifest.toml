@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "military_airbase_designer"
+version = "1.0.0"
+name = "Military Airbase Designer"
+tagline = "Parametric, game-ready military airbase runway, taxiway and base generator"
+maintainer = "Ahmet Faruk Sahin <ahmetfarukshn.com@gmail.com>"
+type = "add-on"
+website = "https://github.com/ahmet6141/Military_airbase_pist"
+tags = ["Object", "Add Mesh", "Material"]
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 Ahmet Faruk Sahin"]
+
+[permissions]
+files = "Writes generated PBR texture PNGs and export files to folders you choose"

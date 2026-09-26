@@ -1,0 +1,40 @@
+{
+  "label": "USAF Class B fighter base (10,000 x 150 ft, PCC)",
+  "base_name": "Airbase",
+  "icao_code": "KXXX",
+  "runway": {
+    "length": 3048.0, "width": 45.72, "heading": 50.0, "runway_class": "B", "surface": "PCC",
+    "slab_size": 6.096, "crown_percent": 1.5, "shoulder_width": 7.62, "shoulder_type": "PAVED",
+    "overrun_type": "PAVED", "overrun_length": 304.8, "arresting_type": "BAK12", "arresting_distance": 457.2,
+    "ils_low": true, "ils_high": false, "elevation": 304.8
+  },
+  "markings": {"standard": "UFC", "leading_zero": true, "taxi_line_width": "6", "hold_line_width": "6"},
+  "taxiways": [
+    {"name": "A", "kind": "PARALLEL", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "offset": 316.23, "fillet_radius": 38.1},
+    {"name": "A1", "kind": "END", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": -1.0, "fillet_radius": 38.1},
+    {"name": "A2", "kind": "CONNECTOR", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": -914.4, "fillet_radius": 38.1},
+    {"name": "A3", "kind": "HIGH_SPEED", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": -304.8, "angle": 30.0, "exit_dir": "LOW", "fillet_radius": 38.1},
+    {"name": "A4", "kind": "CONNECTOR", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": 0.0, "fillet_radius": 38.1},
+    {"name": "A5", "kind": "HIGH_SPEED", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": 304.8, "angle": 30.0, "exit_dir": "HIGH", "fillet_radius": 38.1},
+    {"name": "A6", "kind": "CONNECTOR", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": 914.4, "fillet_radius": 38.1},
+    {"name": "A7", "kind": "END", "side": "LEFT", "width": 22.86, "shoulder_width": 7.62, "station": 1.0, "fillet_radius": 38.1}
+  ],
+  "aprons": [
+    {"name": "Main Apron", "kind": "MAIN", "side": "LEFT", "station": 0.0, "length": 457.2, "depth": 182.88, "aircraft": "FIGHTER", "rows": 2, "spots": 0, "floodlights": true, "hydrants": true},
+    {"name": "Hangar Line", "kind": "HANGAR_LINE", "side": "LEFT", "station": -640.0, "length": 260.0, "depth": 90.0, "aircraft": "FIGHTER", "rows": 1, "spots": 0},
+    {"name": "HAS Loop North", "kind": "HAS_LOOP", "side": "LEFT", "station": 950.0, "length": 520.0, "depth": 380.0, "aircraft": "FIGHTER", "shelters": 12},
+    {"name": "Alert Apron", "kind": "ALERT", "side": "RIGHT", "station": -1150.0, "length": 220.0, "depth": 220.0, "aircraft": "FIGHTER", "spots": 8},
+    {"name": "EOR Pad 05", "kind": "ARM_DEARM", "side": "LEFT", "station": -1400.0, "length": 76.0, "depth": 90.0, "aircraft": "FIGHTER", "spots": 4},
+    {"name": "EOR Pad 23", "kind": "ARM_DEARM", "side": "LEFT", "station": 1400.0, "length": 76.0, "depth": 90.0, "aircraft": "FIGHTER", "spots": 4},
+    {"name": "Hot Cargo Pad", "kind": "HOT_CARGO", "side": "LEFT", "station": 1420.0, "length": 90.0, "depth": 90.0, "aircraft": "TRANSPORT", "spots": 1},
+    {"name": "Trim Pad", "kind": "TRIM_PAD", "side": "LEFT", "station": -430.0, "length": 90.0, "depth": 90.0, "aircraft": "FIGHTER"},
+    {"name": "Helipad", "kind": "HELIPAD", "side": "LEFT", "station": 380.0, "length": 60.0, "depth": 60.0, "aircraft": "HELICOPTER"},
+    {"name": "Compass Rose", "kind": "COMPASS", "side": "LEFT", "station": 600.0, "length": 60.0, "depth": 60.0, "aircraft": "FIGHTER"}
+  ],
+  "lighting": {"edge": "HIRL", "als_low": "ALSF2", "als_high": "MALSR", "papi": true, "papi_side": "LEFT"},
+  "signage": {"sign_size": 3},
+  "structures": {"has_style": "NATO3", "has_layout": "LOOP", "hangars": 2, "control_tower": true, "tower_height": 32.0, "fuel_farm": true, "fuel_tanks": 4, "munitions": true, "igloos": 6},
+  "perimeter": {"fence": true, "double_fence": true, "patrol_road": true, "entry_control_point": true, "guard_towers": true},
+  "terrain": {"ditches": true, "mowing_stripes": true},
+  "materials": {"resolution": "2048", "engine": "UNREAL"}
+}
