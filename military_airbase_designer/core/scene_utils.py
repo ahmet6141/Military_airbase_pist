@@ -20,7 +20,9 @@ CATEGORIES = (
 def addon_prefs(context: bpy.types.Context | None = None):
     """Addon preferences or None (e.g. when running under the pip 'bpy' module in tests)."""
     context = context or bpy.context
-    pkg = __package__.split(".")[0] if __package__ else None
+    # this module is <addon package>.core -> strip one component; works for legacy add-on installs
+    # ("military_airbase_designer.core") and extension installs ("bl_ext.<repo>.military_airbase_designer.core")
+    pkg = __package__.rsplit(".", 1)[0] if __package__ else None
     try:
         return context.preferences.addons[pkg].preferences
     except (KeyError, AttributeError, TypeError):
