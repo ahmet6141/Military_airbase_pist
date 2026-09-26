@@ -48,12 +48,14 @@ def install_addon():
     return tmp
 
 
-def setup_camera(scene, bounds, mode="overview"):
+def setup_camera(scene, bounds, mode="overview", parent=None):
     import bpy
     x0, y0, x1, y1 = bounds
     cam = bpy.data.cameras.new("TestCam")
     co = bpy.data.objects.new("TestCam", cam)
     scene.collection.objects.link(co)
+    if parent is not None:
+        co.parent = parent   # bounds are in the base frame; the root Empty carries the heading
     if mode == "overview":
         cam.type = 'ORTHO'
         cam.clip_end = 20000
@@ -126,7 +128,7 @@ def main(argv=None):
         print("BLEND", args.blend)
     if args.render:
         w, h = (int(v) for v in args.res.split("x"))
-        setup_camera(scene, ctx.plan.site_bounds, args.camera)
+        setup_camera(scene, ctx.plan.site_bounds, args.camera, root)
         sun = bpy.data.lights.new("Sun", 'SUN')
         sun.energy = 4.0
         so = bpy.data.objects.new("Sun", sun)

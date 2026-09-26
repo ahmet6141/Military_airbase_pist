@@ -80,12 +80,23 @@ class RunwayPlan:
     hybrid_end: float = 0.0
 
     def crown(self, x: float, y: float) -> float:
-        """Elevation of the runway surface (crown) at a base-frame point; 0 off-runway."""
-        if self.crown_percent <= 0.0:
+        """Elevation of the runway surface (crown) at a base-frame point; 0 off-runway.
+
+        The crown fades out over the first 45 m of each paved overrun (UFC 3-260-01 Table 3-4:
+        overrun transverse grade transitions within the first 150 ft).
+        """
+        if self.crown_percent <= 0.0 or abs(y) > self.half_w:
             return 0.0
-        if abs(y) > self.half_w or x < -self.half_len or x > self.half_len:
-            return 0.0
-        return (self.half_w - abs(y)) * self.crown_percent * 0.01
+        fade = 1.0
+        if x < -self.half_len:
+            if self.overrun_low is None:
+                return 0.0
+            fade = max(0.0, 1.0 - (-self.half_len - x) / 45.72)
+        elif x > self.half_len:
+            if self.overrun_high is None:
+                return 0.0
+            fade = max(0.0, 1.0 - (x - self.half_len) / 45.72)
+        return (self.half_w - abs(y)) * self.crown_percent * 0.01 * fade
 
     @property
     def polygon(self) -> Poly:
@@ -586,19 +597,20 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
     loop_w = 0.0
     kind = a.kind
 
-    def access(xs: list[float], width: float = ft(75), radius: float = ft(100)):
-        """Stub taxiways from the host (parallel taxiway edge or runway edge) to the apron near edge."""
+    def access(xs: list[float], width: float = ft(75), radius: float = ft(100), extend: float = 0.0):
+        """Stub taxiways from the host (parallel taxiway edge or runway edge) to the apron near edge
+        (``extend`` carries the stub on to pads that start beyond ``near``)."""
         for x in xs:
             p0 = (x, par_y + side * par_hw)
             p1 = (x, near)
-            strip = g.strip(p0, p1, width, extend0=0.0, extend1=0.0)
+            strip = g.strip(p0, p1, width, extend0=0.0, extend1=extend)
             fillets: list[Poly] = []
             for sgn in (1, -1):
                 corner = (x + sgn * width / 2, p0[1])
                 f = g.fillet_corner(corner, (sgn, 0.0), (0.0, side), radius if host == 'PARALLEL' else ft(125))
                 if f:
                     fillets.append(f)
-                corner2 = (x + sgn * width / 2, p1[1])
+                corner2 = (x + sgn * width / 2, p1[1] + side * extend)
                 f2 = g.fillet_corner(corner2, (sgn, 0.0), (0.0, -side), radius * 0.6)
                 if f2:
                     fillets.append(f2)
@@ -741,7 +753,7 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
     elif kind == 'HAS_LOOP':
         # loop taxiway; shelters both sides; the "apron" polygon is the loop pavement itself
         loop_w = ft(50)
-        access([cx], width=ft(50))
+        access([cx], width=ft(50), extend=ft(35))
         lx = a.length - 2 * ft(60)
         ly = a.depth - 2 * ft(60)
         cy = near + side * a.depth / 2
@@ -790,13 +802,13 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
         zone = Z_PAD
         size = ft(100)
         poly = g.rect(cx, near + side * (size / 2 + ft(20)), size, size)
-        access([cx], width=ft(40), radius=ft(40))
+        access([cx], width=ft(40), radius=ft(40), extend=ft(20))
         extra['helipad'] = dict(center=(cx, near + side * (size / 2 + ft(20))), size=size, heading=math.atan2(side, 0.0))
     elif kind == 'COMPASS':
         zone = Z_PAD
         size = ft(120)
         poly = g.rect(cx, near + side * (size / 2 + ft(20)), size, size)
-        access([cx], width=ft(50), radius=ft(50))
+        access([cx], width=ft(50), radius=ft(50), extend=ft(20))
         extra['compass'] = dict(center=(cx, near + side * (size / 2 + ft(20))), size=size)
     elif kind == 'TRIM_PAD':
         zone = Z_APRON
@@ -920,8 +932,9 @@ def _place_perimeter(plan: Plan, s) -> None:
         xs.extend([st.position[0] - hx, st.position[0] + hx]); ys.extend([st.position[1] - hx, st.position[1] + hx])
     for p in plan.wind_cones:
         xs.append(p[0]); ys.append(p[1])
-    # approach light lanes (2,400 ft ALSF) beyond the overruns
-    als_len = ft(2400)
+    # approach light lanes beyond the overruns: UFC ALSF-1/2 are 3,000 ft, MALSR/SSALR 2,400 ft, ODALS 1,500 ft
+    _ALS_LEN = {'ALSF2': ft(3000), 'ALSF1': ft(3000), 'MALSR': ft(2400), 'SSALR': ft(2400), 'ODALS': ft(1500)}
+    als_len = max(_ALS_LEN.get(s.lighting.als_low, 0.0), _ALS_LEN.get(s.lighting.als_high, 0.0), ft(1000))
     xs.extend([-rw.half_len - rw.overrun_length - als_len, rw.half_len + rw.overrun_length + als_len])
     m = per.margin
     x0, y0, x1, y1 = min(xs) - m, min(ys) - m, max(xs) + m, max(ys) + m
