@@ -15,6 +15,9 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProp
 
 from .units import ft
 
+# Blender 4.5+ warns for path properties that do not declare blend-relative support; the option does not exist before 4.5
+_PATH_OPTS = {'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
+
 # --------------------------------------------------------------------------- update plumbing
 _SUSPEND = 0
 
@@ -367,7 +370,7 @@ class MAD_MaterialSettings(bpy.types.PropertyGroup):
     seed: IntProperty(name="Seed", default=1234, min=0, max=999999, update=_upd_mat)
     engine: EnumProperty(name="Engine preset", items=ENGINE_ITEMS, default='UNREAL', update=_upd_mat)
     normal_directx: BoolProperty(name="DirectX normal (Y-)", description="Flip green channel (Unreal); off = OpenGL (Unity/glTF/Blender)", default=True, update=_upd_mat)
-    texture_dir: StringProperty(name="Texture folder", subtype='DIR_PATH', default="//textures/", update=_upd_mat)
+    texture_dir: StringProperty(name="Texture folder", subtype='DIR_PATH', default="//textures/", options=_PATH_OPTS, update=_upd_mat)
     generate_textures: BoolProperty(name="Generate image textures", description="Synthesize PNG texture sets (off = flat placeholder materials)", default=True, update=_upd_mat)
     age: FloatProperty(name="Pavement age", description="0 = new pavement, 1 = heavily weathered", default=0.55, min=0.0, max=1.0, update=_upd_mat)
     rubber: FloatProperty(name="Rubber deposits", description="Touchdown-zone rubber build-up", default=0.7, min=0.0, max=1.0, update=_upd_mat)
@@ -380,7 +383,7 @@ class MAD_MaterialSettings(bpy.types.PropertyGroup):
 class MAD_ExportSettings(bpy.types.PropertyGroup):
     format: EnumProperty(name="Format", items=EXPORT_FORMAT_ITEMS, default='FBX')
     axis: EnumProperty(name="Axis preset", items=AXIS_ITEMS, default='UNREAL')
-    directory: StringProperty(name="Export folder", subtype='DIR_PATH', default="//export/")
+    directory: StringProperty(name="Export folder", subtype='DIR_PATH', default="//export/", options=_PATH_OPTS)
     join_by_category: BoolProperty(name="Join instances by category", description="Merge light fixtures / fence posts etc. into one mesh per category", default=True)
     lods: BoolProperty(name="Generate LODs", default=True)
     lod_count: IntProperty(name="LOD levels", default=3, min=1, max=4)

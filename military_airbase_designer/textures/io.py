@@ -89,6 +89,8 @@ def save_png(arr: np.ndarray, path: str, colorspace: str = 'sRGB', depth: int = 
         ims = scene.render.image_settings
         saved = (ims.file_format, ims.color_depth, ims.color_mode, ims.compression)
         try:
+            if hasattr(ims, "media_type"):      # Blender 5.0+: must be set before file_format
+                ims.media_type = 'IMAGE'
             ims.file_format = 'PNG'
             ims.color_depth = '16'
             ims.color_mode = 'RGBA' if rgba.shape[2] == 4 else 'RGB'

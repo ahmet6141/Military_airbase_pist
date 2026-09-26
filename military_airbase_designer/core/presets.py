@@ -17,8 +17,14 @@ PRESET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 
 
 def user_preset_dir() -> str:
-    base = bpy.utils.user_resource('SCRIPTS', path=os.path.join("presets", "military_airbase_designer"), create=True)
-    return base
+    """Writable per-user preset folder (extension storage when installed as an extension)."""
+    pkg = __package__.rsplit(".", 1)[0] if __package__ else "military_airbase_designer"
+    if pkg.startswith("bl_ext.") and hasattr(bpy.utils, "extension_path_user"):
+        try:
+            return bpy.utils.extension_path_user(pkg, path="presets", create=True)
+        except Exception:
+            pass
+    return bpy.utils.user_resource('SCRIPTS', path=os.path.join("presets", "military_airbase_designer"), create=True)
 
 
 def list_presets() -> list[tuple[str, str, str]]:

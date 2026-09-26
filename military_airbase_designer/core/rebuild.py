@@ -64,3 +64,15 @@ def rebuild_root(root: bpy.types.Object, kinds: set[str] | None = None) -> None:
 
 def is_busy() -> bool:
     return _busy
+
+
+def unregister():
+    """Drop any pending timer / requests (called from the package unregister)."""
+    global _timer_registered
+    _pending.clear()
+    try:
+        if hasattr(bpy.app, "timers") and bpy.app.timers.is_registered(_flush):
+            bpy.app.timers.unregister(_flush)
+    except (ValueError, TypeError):
+        pass
+    _timer_registered = False
