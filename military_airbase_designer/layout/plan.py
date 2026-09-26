@@ -752,25 +752,32 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
         step = perim / shelters
         pts = g.resample_polyline(loop_cl, step, closed=True)
         placed = 0
-        stub_len = size[0] * 0.5 + ft(60)
-        for i, p in enumerate(pts[:shelters + 1]):
+        # UFC 3-260-01 Table 5-1: taxiway CL to fixed obstacle >= 61 m (200 ft) -> shelter front edge at 61 m
+        clearance = ft(200)
+        stub_len = clearance + size[0] * 0.5
+        for i in range(shelters * 2):
             if placed >= shelters:
                 break
-            q, tang = g.point_along(loop_cl + [loop_cl[0]], step * i + step * 0.5)
+            q, tang = g.point_along(loop_cl + [loop_cl[0]], (step * i + step * 0.5) % perim)
             outward = g.perp_left(tang)
-            # ensure outward points away from the loop centre
             if g.dot(outward, (q[0] - cx, q[1] - cy)) < 0:
                 outward = (-outward[0], -outward[1])
-            # skip positions too close to the access stub
-            if abs(q[0] - cx) < ft(80) and (q[1] - near) * side < ft(80):
+            # keep the access side clear
+            if abs(q[0] - cx) < ft(80) and (q[1] - near) * side < ft(120):
                 continue
-            centre = (q[0] + outward[0] * stub_len, q[1] + outward[1] * stub_len)
-            rot = math.atan2(outward[1], outward[0])
-            structures.append(StructurePlan('HAS', centre, rot, size, {'style': s.structures.has_style}, f"HAS {placed + 1}"))
-            lead = [q, (q[0] + outward[0] * (stub_len - size[0] * 0.5 - 2.0), q[1] + outward[1] * (stub_len - size[0] * 0.5 - 2.0))]
-            spots.append(Spot(lead[-1], rot + math.pi, a.aircraft, f"H{placed + 1}", lead))
-            # stub pavement (taxilane to the shelter)
-            access_polys.append(g.strip(q, lead[-1], ft(40), extend0=loop_w * 0.5, extend1=size[0] * 0.5 + 2.0))
+            # alternate +-30 deg facing for dispersal (real NATO loops stagger shelter headings)
+            skew = math.radians(30.0) * (1 if placed % 2 == 0 else -1)
+            face = g.rotate_point(outward, skew)
+            centre = (q[0] + face[0] * stub_len, q[1] + face[1] * stub_len)
+            rot = math.atan2(face[1], face[0])
+            structures.append(StructurePlan('HAS', centre, rot, size, {'style': s.structures.has_style, 'index': placed}, f"HAS {placed + 1}"))
+            door = (q[0] + face[0] * (stub_len - size[0] * 0.5 - 2.0), q[1] + face[1] * (stub_len - size[0] * 0.5 - 2.0))
+            lead = [q, door]
+            spots.append(Spot(door, rot + math.pi, a.aircraft, f"H{placed + 1}", lead))
+            # stub pavement (taxilane to the shelter) with a hardstand in front of the doors
+            access_polys.append(g.strip(q, door, ft(50), extend0=loop_w * 0.5, extend1=size[0] * 0.5 + 2.0))
+            hs_c = (q[0] + face[0] * (stub_len - size[0] * 0.5 - 12.0), q[1] + face[1] * (stub_len - size[0] * 0.5 - 12.0))
+            access_polys.append(g.rect(hs_c[0], hs_c[1], 24.0, size[1] + 10.0, rot))
             placed += 1
         zone = Z_TAXIWAY
         poly = g.polyline_strip(loop_cl, loop_w, closed=True)[0]   # outer loop (inner handled as hole by pavement builder)
