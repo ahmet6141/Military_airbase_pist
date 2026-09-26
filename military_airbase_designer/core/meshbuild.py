@@ -199,7 +199,7 @@ class MeshBuilder:
         for p in top:
             self.add_vertex((p[0], p[1], z1))
         circ = 2 * math.pi * radius
-        for i in range(segments):
+        for i in range(segments if rt > 1e-6 else 0):     # a cone's side IS the apex fan below
             j = (i + 1) % segments
             u0 = circ * i / segments / uv_tile
             u1 = circ * (i + 1) / segments / uv_tile
@@ -207,7 +207,7 @@ class MeshBuilder:
                               uvs=[(u0, z0 / uv_tile), (u1, z0 / uv_tile), (u1, z1 / uv_tile), (u0, z1 / uv_tile)])
         if cap_top and rt > 1e-6:
             self.add_face_idx(tuple(range(bt, bt + segments)), mat, False, uv_fn=planar_uv(uv_tile))
-        elif cap_top:  # cone apex
+        elif rt <= 1e-6:  # cone apex: the fan is the side surface
             apex = self.add_vertex((center[0], center[1], z1))
             for i in range(segments):
                 j = (i + 1) % segments
@@ -321,10 +321,10 @@ class MeshBuilder:
                               uvs=[(x0 / uv_tile, v0), (x1 / uv_tile, v0), (x1 / uv_tile, v1), (x0 / uv_tile, v1)])
             acc += seg
         cm = mat if cap_mat is None else cap_mat
-        if cap_start:
-            self.add_face_idx(tuple(reversed(r0)), cm, False, uvs=[(y / uv_tile, z / uv_tile) for y, z in reversed(profile)])
+        if cap_start:   # profile runs left->right over the top (CW in y,z): in order -> normal -X (outward at x0)
+            self.add_face_idx(tuple(r0), cm, False, uvs=[(y / uv_tile, z / uv_tile) for y, z in profile])
         if cap_end:
-            self.add_face_idx(tuple(r1), cm, False, uvs=[(y / uv_tile, z / uv_tile) for y, z in profile])
+            self.add_face_idx(tuple(reversed(r1)), cm, False, uvs=[(y / uv_tile, z / uv_tile) for y, z in reversed(profile)])
 
     # ------------------------------------------------------------------ composition
     def append(self, other: "MeshBuilder", matrix: Matrix | None = None, mat_offset: int = 0) -> None:

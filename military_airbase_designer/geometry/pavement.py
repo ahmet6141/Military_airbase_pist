@@ -32,9 +32,10 @@ Public helpers used by ``geometry.terrain``: ``get_footprint`` (cached on the Bu
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Sequence
 
+import numpy as np
 from mathutils import Vector
 from mathutils.geometry import tessellate_polygon
 from mathutils.kdtree import KDTree
@@ -124,6 +125,55 @@ def smoothstep(e0: float, e1: float, x: float) -> float:
     if x >= e1:
         return 1.0
     t = (x - e0) / (e1 - e0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+# ---- vectorised twins (bit-identical hash, used for the per-vertex masks of big meshes)
+def _hash01_np(ix: np.ndarray, iy: np.ndarray, seed: int) -> np.ndarray:
+    ix = ix.astype(np.int64).astype(np.uint32)
+    iy = iy.astype(np.int64).astype(np.uint32)
+    h = ix * np.uint32(0x8DA6B343) + iy * np.uint32(0xD8163841) + np.uint32((seed * 0xCB1AB31F) & 0xFFFFFFFF)
+    h ^= h >> np.uint32(15)
+    h = h * np.uint32(0x2C1B3C6D)
+    h ^= h >> np.uint32(12)
+    h = h * np.uint32(0x297A2D39)
+    h ^= h >> np.uint32(15)
+    return h.astype(np.float64) / 4294967296.0
+
+
+def value_noise_np(x: np.ndarray, y: np.ndarray, period: float, seed: int = 0) -> np.ndarray:
+    fx = x / period
+    fy = y / period
+    ix = np.floor(fx)
+    iy = np.floor(fy)
+    tx = fx - ix
+    ty = fy - iy
+    sx = tx * tx * (3.0 - 2.0 * tx)
+    sy = ty * ty * (3.0 - 2.0 * ty)
+    a = _hash01_np(ix, iy, seed)
+    b = _hash01_np(ix + 1, iy, seed)
+    c = _hash01_np(ix, iy + 1, seed)
+    d = _hash01_np(ix + 1, iy + 1, seed)
+    top = a + (b - a) * sx
+    bot = c + (d - c) * sx
+    return top + (bot - top) * sy
+
+
+def fbm_np(x: np.ndarray, y: np.ndarray, period: float, seed: int = 0, octaves: int = 3) -> np.ndarray:
+    amp = 1.0
+    total = np.zeros_like(x, dtype=np.float64)
+    norm = 0.0
+    p = period
+    for i in range(octaves):
+        total += amp * value_noise_np(x + 17.3 * i, y - 11.1 * i, p, seed + i * 101)
+        norm += amp
+        amp *= 0.5
+        p *= 0.5
+    return total / norm
+
+
+def smoothstep_np(e0: float, e1: float, x: np.ndarray) -> np.ndarray:
+    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
 
@@ -333,29 +383,25 @@ def offset_band(loops: Sequence[Poly], is_outer: Sequence[bool], widths: Sequenc
     if not polys:
         return Band([], [], [], [])
     pts, tris, origins = g.union_triangulate(polys, ())
+    # A triangle is band when it lies outside the region (outer loops +1, holes -1 -> depth 0) and inside
+    # the offset region (offsets of outer loops +1, shrunk holes -1 -> depth > 0). Counting both ways keeps
+    # nesting right: an outer offset also covers every island inside it, but the island's shrunk loop
+    # cancels it again, so only the true band strip remains.
     band_tris: list[Tri] = []
     for t, orig in zip(tris, origins):
         depth = 0
-        in_band = False
+        off_depth = 0
         for i in orig:
             k = kind[i]
             if k == 1:
                 depth += 1
             elif k == -1:
                 depth -= 1
-        if depth != 0:
-            continue                      # inside the region (pavement)
-        for i in orig:
-            k = kind[i]
-            if k == 2:
-                in_band = True
-                break
-        if not in_band:
-            # inside a hole: band unless inside the shrunk hole
-            hole = any(kind[i] == -1 for i in orig)
-            shrunk = any(kind[i] == -2 for i in orig)
-            in_band = hole and not shrunk
-        if in_band:
+            elif k == 2:
+                off_depth += 1
+            else:
+                off_depth -= 1
+        if depth == 0 and off_depth > 0:
             band_tris.append(t)
     region_keys = {_key(p) for lp in loops for p in lp}
     outline: list[Poly] = []
@@ -621,6 +667,30 @@ class WearModel:
     def macro_at(self, x: float, y: float) -> float:
         return fbm(x, y, 120.0, self.seed + 5, octaves=3)
 
+    # ---- vectorised versions (same formulas) for whole point arrays
+    def rubber_np(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        if self.rubber <= 0.0:
+            return np.zeros_like(x)
+        ay = np.abs(y)
+        lateral = 0.75 * np.exp(-(y / 6.0) ** 2) + 0.35 * np.exp(-(y / 12.0) ** 2)
+        long = np.zeros_like(x)
+        for k, thr in enumerate(self.thr):
+            s = (x - thr) if k == 0 else (thr - x)
+            bell = np.exp(-((s - RUBBER_PEAK) / RUBBER_SIGMA) ** 2) * smoothstep_np(0.0, 90.0, s)
+            long += np.where((s >= -5.0) & (s <= 1100.0), bell, 0.0)
+        tracks = 0.12 * np.exp(-((ay - 3.5) / 2.2) ** 2) * (0.6 + 0.8 * value_noise_np(x, y, 90.0, self.seed + 7))
+        n = 0.7 + 0.6 * fbm_np(x, y * 2.0, 22.0, self.seed + 3, octaves=2)
+        return np.clip((np.minimum(long, 1.0) * lateral * n + tracks) * self.rubber, 0.0, 1.0)
+
+    def dirt_np(self, edge_dist: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        if self.dirt <= 0.0:
+            return np.zeros_like(x)
+        band = np.maximum(0.0, 1.0 - edge_dist / DIRT_FALLOFF) * (0.7 + 0.6 * value_noise_np(x, y, 9.0, self.seed + 11))
+        return np.clip(band * self.dirt, 0.0, 1.0)
+
+    def macro_np(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return fbm_np(x, y, 120.0, self.seed + 5, octaves=3)
+
 
 # --------------------------------------------------------------------------- builders
 def _seed(ctx) -> int:
@@ -632,11 +702,14 @@ def _build_airfield(ctx, fp: Footprint) -> None:
     wear = WearModel(ctx.plan, ctx.settings, _seed(ctx))
     uv_fns = [planar_uv(SPECS[n].tile) for n in PAVEMENT_MATERIALS]
     mb = MeshBuilder()
-    vcol: list[tuple[float, float, float, float]] = []
-    for p, d in zip(fp.points, fp.edge_dist):
-        x, y = p
-        mb.add_vertex((x, y, rw.crown(x, y)))
-        vcol.append((wear.rubber_at(x, y), wear.dirt_at(d, x, y), wear.macro_at(x, y), 1.0))
+    xy = np.asarray(fp.points, dtype=np.float64).reshape(-1, 2)
+    xs, ys = xy[:, 0], xy[:, 1]
+    r_arr = wear.rubber_np(xs, ys)
+    g_arr = wear.dirt_np(np.asarray(fp.edge_dist, dtype=np.float64), xs, ys)
+    b_arr = wear.macro_np(xs, ys)
+    vcol = [(float(r), float(gg), float(b), 1.0) for r, gg, b in zip(r_arr, g_arr, b_arr)]
+    for p in fp.points:
+        mb.add_vertex((p[0], p[1], rw.crown(p[0], p[1])))
     runway_zones = (planmod.Z_RUNWAY, planmod.Z_RUNWAY_ASPHALT)
     for t, m, z in zip(fp.tris, fp.mats, fp.zones):
         on_rw = z in runway_zones
@@ -659,9 +732,12 @@ def _build_shoulders(ctx, fp: Footprint) -> None:
     mb = MeshBuilder(default_uv=planar_uv(SPECS[mat_name].tile))
     seed = _seed(ctx)
     dirt = max(0.3, float(getattr(getattr(ctx.settings, "materials", None), "dirt", 0.5)))
-    cols = []
     base = len(mb.verts)
-    for p in band.points:
+    xy = np.asarray(band.points, dtype=np.float64).reshape(-1, 2)
+    n_arr = 0.7 + 0.6 * value_noise_np(xy[:, 0], xy[:, 1], 7.0, seed + 13)
+    b_arr = fbm_np(xy[:, 0], xy[:, 1], 120.0, seed + 5)
+    cols = []
+    for k, p in enumerate(band.points):
         x, y = p
         d, w = fp.edge_field.find(x, y)
         w = w if w > 0.0 else 1.0
@@ -670,8 +746,7 @@ def _build_shoulders(ctx, fp: Footprint) -> None:
             z = rw.crown(x, y)          # meet the slab exactly (runway ends without overrun carry the crown)
         mb.add_vertex((x, y, z))
         t = 0.35 + 0.65 * min(1.0, d / w)   # dirt grows towards the outer edge
-        cols.append((0.0, min(1.0, t * (0.7 + 0.6 * value_noise(x, y, 7.0, seed + 13)) * dirt),
-                     fbm(x, y, 120.0, seed + 5), 1.0))
+        cols.append((0.0, min(1.0, t * float(n_arr[k]) * dirt), float(b_arr[k]), 1.0))
     for a, b, c in band.tris:
         mb.add_face_idx((base + a, base + b, base + c), 0, not paved, colors=[cols[a], cols[b], cols[c]])
     me = mb.build("MAD_Pavement_Shoulders", [ctx.mats(mat_name)])
@@ -717,12 +792,14 @@ def _build_roads(ctx) -> None:
         loops = [[points[i] for i in lp] for lp in g.boundary_loops(tris)]
         fld = DistanceField(loops, step=1.0) if loops else None
         base = len(mb.verts)
+        xy = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+        n_arr = 0.6 + 0.4 * value_noise_np(xy[:, 0], xy[:, 1], 6.0, seed + 17)
+        b_arr = fbm_np(xy[:, 0], xy[:, 1], 120.0, seed + 5)
         cols = []
-        for p in points:
+        for k, p in enumerate(points):
             mb.add_vertex((p[0], p[1], ROAD_Z))
             d = fld.dist(p[0], p[1]) if fld else 0.0
-            gdirt = max(0.0, 1.0 - d / 1.2) * (0.6 + 0.4 * value_noise(p[0], p[1], 6.0, seed + 17))
-            cols.append((0.0, gdirt, fbm(p[0], p[1], 120.0, seed + 5), 1.0))
+            cols.append((0.0, max(0.0, 1.0 - d / 1.2) * float(n_arr[k]), float(b_arr[k]), 1.0))
         for a, b, c in tris:
             mb.add_face_idx((base + a, base + b, base + c), 0, False, colors=[cols[a], cols[b], cols[c]])
 

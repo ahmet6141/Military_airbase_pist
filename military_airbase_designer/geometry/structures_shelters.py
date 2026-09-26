@@ -135,8 +135,8 @@ def has_mesh(ctx, style: str, size: tuple[float, float, float], exterior: str, d
     # buttresses behind the wing ends
     for s in (1, -1):
         y = s * (G.W / 2 - 0.6)
-        p.box_xyz(G.x_front + G.th - 0.05, G.x_front + G.th + 2.2, y - 0.5, y + 0.5, zg, G.Hw * 0.8, 'ConcreteWall')
-        p.plate((G.x_front + G.th + 1.1, y, G.Hw * 0.8 + 0.1), (2.3, 1.0, 0.25), 'ConcreteWall', rot_y=math.radians(12))
+        p.box_xyz(G.x_front + G.th - 0.05, G.x_front + G.th + 2.4, y - 0.5, y + 0.5, zg, G.Hw * 0.55, 'ConcreteWall')
+        p.box_xyz(G.x_front + G.th - 0.05, G.x_front + G.th + 1.3, y - 0.5, y + 0.5, G.Hw * 0.55 - 0.05, G.Hw * 0.9, 'ConcreteWall')
 
     # ---- rear wall with exhaust port, cheek walls and angled blast deflector
     rear_poly = list(outer)
@@ -210,8 +210,11 @@ def has_mesh(ctx, style: str, size: tuple[float, float, float], exterior: str, d
 
     # ---- slab under the shelter and hardstand in front (flush with pavement, +5 mm)
     x_slab0 = G.x_front - 1.0
-    p.prism(g.rect_xy(x_slab0, G.L / 2 + 1.0, -G.W / 2 - 1.0, G.W / 2 + 1.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
-    p.prism(g.rect_xy(x_slab0 - 30.0, x_slab0, -15.0, 15.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
+    x_wing = G.x_front + G.th + 3.4          # slab follows the wings at the front, then hugs the arch flanks
+    wa, ww = G.a + 1.0, G.W / 2 + 1.0
+    slab = [(x_slab0, -ww), (x_wing, -ww), (x_wing, -wa), (G.L / 2 + 1.0, -wa), (G.L / 2 + 1.0, wa), (x_wing, wa), (x_wing, ww), (x_slab0, ww)]
+    p.prism(slab, K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x_slab0 - 30.0, x_slab0, -15.0, 15.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
     return p.build(f"Structures_HAS_{style}_{exterior}", smooth_angle=math.radians(40))
 
 
@@ -246,7 +249,7 @@ def revetment_mesh(ctx, size: tuple[float, float, float], detail: float) -> bpy.
         p.box_xyz(x0 - 0.3, x0 + 0.5, s * (hy - t - 0.3), s * (hy + 0.2), -0.1, h + 0.15, 'ConcreteWall')
     if detail >= 0.75:
         p.box((x1 - 1.6, 0.0, 0.3), (0.8, 0.8, 0.6), 'ConcreteBase')
-    p.prism(g.rect_xy(x0 - 1.0, x1 + 1.0, -hy - 1.0, hy + 1.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x0 - 1.0, x1 + 1.0, -hy - 1.0, hy + 1.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
     return p.build("Structures_Revetment")
 
 
@@ -290,7 +293,7 @@ def igloo_mesh(ctx, detail: float) -> bpy.types.Mesh:
         p.panel((x_head - 0.6, s * door_w / 4, zg + 0.3 + door_h / 2), door_w / 2 - 0.03, door_h, 'BlastDoor', '-X', proud=0.05)
     p.panel((x_head - 0.6, hw_w / 2 - 1.2, 3.6), 0.6, 0.6, 'PaintOrange', '-X', proud=0.012)
     # loading apron in front, vent hood and lightning rod on the mound
-    p.prism(g.rect_xy(x_head - 12.6, x_head - 0.6, -5.0, 5.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x_head - 12.6, x_head - 0.6, -5.0, 5.0), K.PAD_TOP - 0.35, K.PAD_TOP, 'PadConcrete', uv_tile=12.19)
     p.box((x_head + mL * 0.45, 0.0, mh + 0.15), (0.8, 0.8, 0.7), 'MetalDark')
     p.box((x_head + mL * 0.45, 0.0, mh + 0.55), (1.1, 1.1, 0.1), 'MetalDark')
     if detail > 1.25:
@@ -330,7 +333,7 @@ def build_munitions(ctx, st, idx: int, detail: float) -> None:
     half_x = row_len / 2 + 45.0
     half_y = centre_off + mL * 0.6 + 25.0
     road_w = 6.0
-    p.prism(g.rect_xy(-half_x - 40.0, half_x - 10.0, -road_w / 2, road_w / 2), -0.06, 0.02, 'Road', uv_tile=5.0)
+    p.prism(K.rxy(-half_x - 40.0, half_x - 10.0, -road_w / 2, road_w / 2), -0.06, 0.02, 'Road', uv_tile=5.0)
     _fence_rect(p, -half_x, half_x, -half_y, half_y, height=2.4, post_pitch=3.0, detail=detail,
                 gate=(-half_x, 0.0, road_w + 2.0))
     if detail >= 0.75:

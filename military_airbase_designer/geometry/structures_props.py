@@ -487,6 +487,11 @@ def ray_to_pavement(plan, origin: Point, direction: Point, max_dist: float = 150
     return None
 
 
+def rxy(x0: float, x1: float, y0: float, y1: float) -> list[Point]:
+    """Axis-aligned rectangle from x/y extents (note: ``geom2d.rect_xy`` takes corners (x0, y0, x1, y1))."""
+    return g.rect_xy(x0, y0, x1, y1)
+
+
 def kind_label(kind: str) -> str:
     """'FIRE_STATION' -> 'FireStation' (object name fragment); acronyms stay upper-case."""
     if kind in ('HAS', 'ECP'):

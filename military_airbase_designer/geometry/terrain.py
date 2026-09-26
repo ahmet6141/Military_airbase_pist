@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 from typing import Sequence
 
+import numpy as np
 from mathutils.kdtree import KDTree
 
 from ..core import constants as C
@@ -108,10 +109,12 @@ def build(ctx) -> None:
     if dirt.tris:
         mb = MeshBuilder(default_uv=planar_uv(SPECS['Dirt'].tile))
         base = len(mb.verts)
+        xy = np.asarray(dirt.points, dtype=np.float64).reshape(-1, 2)
+        b_arr = pv.fbm_np(xy[:, 0], xy[:, 1], 120.0, seed + 5)
         cols = []
-        for p in dirt.points:
+        for k, p in enumerate(dirt.points):
             mb.add_vertex((p[0], p[1], fp.surface_z(p[0], p[1])))
-            cols.append((0.0, 1.0, pv.fbm(p[0], p[1], 120.0, seed + 5), 1.0))
+            cols.append((0.0, 1.0, float(b_arr[k]), 1.0))
         for a, b, c in dirt.tris:
             mb.add_face_idx((base + a, base + b, base + c), 0, True, colors=[cols[a], cols[b], cols[c]])
         me = mb.build("MAD_Terrain_DirtStrip", [ctx.mats('Dirt')])
@@ -183,28 +186,6 @@ def build(ctx) -> None:
     undulation = float(s.undulation)
     fade0, fade1 = UNDULATION_FADE
 
-    def ground_z(x: float, y: float) -> tuple[float, float]:
-        """(z, distance to the dirt outline)."""
-        d = dirt_field.dist(x, y)
-        z = C.DIRT_STEP
-        if undulation > 0.0:
-            w = pv.smoothstep(fade0, fade1, d)
-            if w > 0.0:
-                w *= 1.0 - struct_field.flat_weight(x, y)
-                if road_lines:
-                    w *= pv.smoothstep(ROAD_FLAT[0], ROAD_FLAT[1], road_field.dist(x, y))
-                if w > 0.0:
-                    n = pv.fbm(x, y, UNDULATION_PERIOD, seed + 21, octaves=3)
-                    z += w * undulation * (n * 2.0 - 1.0)
-        for yd, xa, xb in ditches:
-            u = abs(y - yd) / hw
-            if u >= 1.0 or x < xa - DITCH_TAPER or x > xb + DITCH_TAPER:
-                continue
-            taper = pv.smoothstep(xa - DITCH_TAPER, xa, x) * (1.0 - pv.smoothstep(xb, xb + DITCH_TAPER, x))
-            clear = pv.smoothstep(DITCH_CLEAR * 0.5, DITCH_CLEAR + 4.0, d)
-            z -= DITCH_DEPTH * _ditch_profile(u) * taper * clear
-        return z, d
-
     pts, tris, origins = g.union_triangulate(polys, (), extra_points=extra)
     keep: list[tuple[int, int, int]] = []
     for t, orig in zip(tris, origins):
@@ -218,14 +199,42 @@ def build(ctx) -> None:
         return
     used = sorted({i for t in keep for i in t})
     remap = {o: n for n, o in enumerate(used)}
+
+    # ---- heights and masks (vectorised where it counts)
+    xy = np.asarray([pts[i] for i in used], dtype=np.float64).reshape(-1, 2)
+    xs, ys = xy[:, 0], xy[:, 1]
+    dist = np.asarray([dirt_field.dist(x, y) for x, y in zip(xs, ys)], dtype=np.float64)
+    z = np.full(len(used), C.DIRT_STEP, dtype=np.float64)
+    if undulation > 0.0:
+        w = pv.smoothstep_np(fade0, fade1, dist)
+        far = np.nonzero(w > 0.0)[0]
+        for k in far:                      # graded flats around roads / structures / approach lanes
+            x, y = xs[k], ys[k]
+            f = 1.0 - struct_field.flat_weight(x, y)
+            if road_lines:
+                f *= pv.smoothstep(ROAD_FLAT[0], ROAD_FLAT[1], road_field.dist(x, y))
+            w[k] *= f
+        noise = pv.fbm_np(xs, ys, UNDULATION_PERIOD, seed + 21, octaves=3)
+        z += w * undulation * (noise * 2.0 - 1.0)
+    for yd, xa, xb in ditches:
+        u = np.abs(ys - yd) / hw
+        sel = np.nonzero((u < 1.0) & (xs >= xa - DITCH_TAPER) & (xs <= xb + DITCH_TAPER))[0]
+        for k in sel:
+            x = xs[k]
+            taper = pv.smoothstep(xa - DITCH_TAPER, xa, x) * (1.0 - pv.smoothstep(xb, xb + DITCH_TAPER, x))
+            clear = pv.smoothstep(DITCH_CLEAR * 0.5, DITCH_CLEAR + 4.0, dist[k])
+            z[k] -= DITCH_DEPTH * _ditch_profile(u[k]) * taper * clear
+    if dirt_w > 0.0 or fp.has_shoulder:
+        gdirt = np.maximum(0.0, 1.0 - dist / DIRT_BLEND)
+    else:
+        gdirt = np.zeros(len(used))
+    macro = pv.fbm_np(xs, ys, 150.0, seed + 5)
+
     mb = MeshBuilder(default_uv=planar_uv(SPECS['Grass'].tile))
     cols = []
-    for i in used:
-        x, y = pts[i]
-        z, d = ground_z(x, y)
-        mb.add_vertex((x, y, z))
-        gdirt = max(0.0, 1.0 - d / DIRT_BLEND) if dirt_w > 0.0 or fp.has_shoulder else 0.0
-        cols.append((0.0, gdirt, pv.fbm(x, y, 150.0, seed + 5), 1.0))
+    for k in range(len(used)):
+        mb.add_vertex((float(xs[k]), float(ys[k]), float(z[k])))
+        cols.append((0.0, float(gdirt[k]), float(macro[k]), 1.0))
     for a, b, c in keep:
         ia, ib, ic = remap[a], remap[b], remap[c]
         mb.add_face_idx((ia, ib, ic), 0, True, colors=[cols[ia], cols[ib], cols[ic]])

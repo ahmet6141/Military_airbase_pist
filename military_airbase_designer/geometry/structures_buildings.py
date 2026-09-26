@@ -78,8 +78,8 @@ def hangar_mesh(ctx, size: tuple[float, float, float], large: bool, detail: floa
     eave, ridge = H * 0.85, H
     # slab + access apron (flush, +2 cm)
     z_fl = 0.02
-    p.prism(g.rect_xy(x0 - 1.0, x1 + 1.0, -hy - 1.0, hy + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
-    p.prism(g.rect_xy(x1 + 1.0, x1 + 1.0 + apron_depth, -hy - 1.0, hy + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x0 - 1.0, x1 + 1.0, -hy - 1.0, hy + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x1 + 1.0, x1 + 1.0 + apron_depth, -hy - 1.0, hy + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
     # plinth band (Trim) on the three closed sides and beside the door
     door_w, door_h = W - 5.0, eave - 1.2
     p.box_xyz(x0, x0 + 0.35, -hy, hy, z_fl, 1.2, 'Trim')
@@ -234,9 +234,9 @@ def fire_station_mesh(ctx, size: tuple[float, float, float], detail: float, ramp
     yb0, yb1 = -Wf / 2, -Wf / 2 + bay_w
     ya0, ya1 = yb1, Wf / 2
     z_fl = 0.02
-    p.prism(g.rect_xy(x0 - 1.0, x1 + 1.0, -Wf / 2 - 1.0, Wf / 2 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
-    p.prism(g.rect_xy(x1 + 1.0, x1 + 1.0 + ramp_depth, yb0 - 1.0, yb1 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
-    p.prism(g.rect_xy(x0 - 1.0 - min(ramp_depth, 12.0), x0 - 1.0, yb0 - 1.0, yb1 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x0 - 1.0, x1 + 1.0, -Wf / 2 - 1.0, Wf / 2 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x1 + 1.0, x1 + 1.0 + ramp_depth, yb0 - 1.0, yb1 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(x0 - 1.0 - min(ramp_depth, 12.0), x0 - 1.0, yb0 - 1.0, yb1 + 1.0), z_fl - 0.35, z_fl, 'PadConcrete', uv_tile=12.19)
     # apparatus bay block
     p.box_xyz(x0, x1, yb0, yb1 + 0.3, z_fl, 1.0, 'Trim')
     p.box_xyz(x0 + 0.04, x1 - 0.04, yb0 + 0.04, yb1 + 0.26, 1.0, z_fl + Hf, 'MetalPainted', mat_top='RoofMembrane')
@@ -285,18 +285,23 @@ def tank_mesh(ctx, detail: float) -> bpy.types.Mesh:
     seg = 16 if detail < 0.75 else (32 if detail > 1.25 else 24)
     p.cylinder((0.0, 0.0), r + 0.7, -0.15, 0.3, 'ConcreteBase', seg, cap_top=True, smooth=False)
     p.cylinder((0.0, 0.0), r, 0.3, TANK_H, 'TankWhite', seg, cap_top=False, smooth=True, uv_tile=4.0)
-    p.cylinder((0.0, 0.0), r + 0.15, TANK_H - 0.05, TANK_H + 1.3, 'TankWhite', seg, cap_top=True, smooth=True, radius_top=0.0)
+    # conical roof (small flat crown disc: add_cylinder with radius_top=0 would emit the apex fan twice)
+    p.cylinder((0.0, 0.0), r + 0.15, TANK_H - 0.05, TANK_H + 1.3, 'TankWhite', seg, cap_top=True, smooth=True, radius_top=0.5)
     p.torus((0.0, 0.0, TANK_H - 0.6), r + 0.12, 0.12, 'MetalDark', seg, 6)
     p.box((r - 0.2, 0.0, 1.0), (0.9, 0.9, 1.0), 'MetalDark')
     p.box((r + 0.5, 0.0, 1.3), (0.5, 0.5, 0.5), 'MetalDark')     # nozzle / valve
     if detail >= 0.75:
-        p.tube([(r * 0.7 * math.cos(a), r * 0.7 * math.sin(a), TANK_H + 1.3 - 0.7 * 1.3 / (r + 0.15) * 0) for a in (0.0, math.pi / 2, math.pi, 1.5 * math.pi, 0.0)],
-               0.03, 'Galvanized', 4, caps=False)
+        # roof-edge handrail ring and posts, roof vent
+        ring = [((r + 0.1) * math.cos(2 * math.pi * i / 16), (r + 0.1) * math.sin(2 * math.pi * i / 16), TANK_H + 1.05) for i in range(17)]
+        p.tube(ring, 0.025, 'Galvanized', 4, caps=False)
+        for i in range(0, 16, 2):
+            x, y, _ = ring[i]
+            p.tube([(x, y, TANK_H - 0.05), (x, y, TANK_H + 1.05)], 0.02, 'Galvanized', 4, caps=False)
         p.tube([(0.0, 0.0, TANK_H + 1.2), (0.0, 0.0, TANK_H + 2.6)], 0.07, 'MetalDark', 6)     # vent
     if detail > 1.25:
         pts = []
         turns = 1.15
-        n = 40
+        n = 28
         for i in range(n + 1):
             a = 2 * math.pi * turns * i / n
             pts.append(((r + 0.5) * math.cos(a), (r + 0.5) * math.sin(a), 0.5 + (TANK_H - 0.8) * i / n))
@@ -335,7 +340,7 @@ def build_fuel_farm(ctx, st, idx: int, detail: float, bollard: bpy.types.Mesh | 
     # containment: gravel floor + earthen dike (crest 1.5 m, 2H:1V both faces)
     ix0, ix1 = -fx / 2 - 5.0, fx / 2 + 5.0
     iy0, iy1 = -fy / 2 + 1.0, fy / 2 + 11.0
-    p.prism(g.rect_xy(ix0, ix1, iy0, iy1), -0.25, 0.0, 'Gravel', uv_tile=3.0)
+    p.prism(K.rxy(ix0, ix1, iy0, iy1), -0.25, 0.0, 'Gravel', uv_tile=3.0)
     hb = 1.5
     crest = 1.2
     slope = 2.0 * hb
@@ -369,7 +374,7 @@ def build_fuel_farm(ctx, st, idx: int, detail: float, bollard: bpy.types.Mesh | 
     office_block(p, px, py - 2.0, 6.0, 4.0, 1, detail, wall='ConcreteWall', floor_h=3.5, entrance=None, hvac=False, windows=False)
     p.panel((px + 3.0, py - 2.0, K.SLAB_TOP + 1.1), 1.2, 2.2, 'MetalDark', '+X', proud=0.04)
     fsx, fsy = px + 22.0, py - 3.0
-    p.prism(g.rect_xy(fsx - 12.0, fsx + 12.0, fsy - 8.0, fsy + 8.0), 0.02 - 0.35, 0.02, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(fsx - 12.0, fsx + 12.0, fsy - 8.0, fsy + 8.0), 0.02 - 0.35, 0.02, 'PadConcrete', uv_tile=12.19)
     p.canopy(fsx, fsy, 15.0, 8.0, 5.5, thick=0.5, col=0.4, mat_roof='MetalDark', mat_fascia='Trim')
     p.box((fsx, fsy + 2.5, 0.02 + 0.6), (10.0, 1.2, 1.2), 'ConcreteBase')          # fill stand island
     for i in range(3):
@@ -395,7 +400,7 @@ def wash_rack_mesh(ctx, size: tuple[float, float, float], detail: float) -> bpy.
     L, W = size[0], size[1]
     p = Part(ctx, uv_tile=4.0)
     z = 0.02
-    p.prism(g.rect_xy(-L / 2, L / 2, -W / 2, W / 2), z - 0.35, z, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(-L / 2, L / 2, -W / 2, W / 2), z - 0.35, z, 'PadConcrete', uv_tile=12.19)
     outer = g.rect(0.0, 0.0, L + 0.4, W + 0.4)
     inner = g.rect(0.0, 0.0, L, W)
     p.prism(outer, z - 0.1, z + 0.15, 'ConcreteBase', holes=[inner])
@@ -437,7 +442,7 @@ def ecp_mesh(ctx, size: tuple[float, float, float], detail: float) -> bpy.types.
     road_w = 7.0
     p = Part(ctx, uv_tile=2.0)
     # concrete pad under the check point
-    p.prism(g.rect_xy(-8.0, 8.0, -road_w / 2 - 1.5, road_w / 2 + 1.5), 0.02 - 0.3, 0.02, 'PadConcrete', uv_tile=12.19)
+    p.prism(K.rxy(-8.0, 8.0, -road_w / 2 - 1.5, road_w / 2 + 1.5), 0.02 - 0.3, 0.02, 'PadConcrete', uv_tile=12.19)
     # gatehouse
     gy = road_w / 2 + 1.5 + 2.6
     office_block(p, 0.0, gy, 8.0, 5.0, 1, detail, wall='ConcreteWall', floor_h=3.6, entrance='-Y', band=(1.0, 2.4), hvac=detail >= 0.75)
@@ -455,7 +460,7 @@ def ecp_mesh(ctx, size: tuple[float, float, float], detail: float) -> bpy.types.
     for s in (1, -1):
         sy = s * (road_w / 2 + 0.8)
         p.tube([(9.0, sy, 0.02), (9.0, sy, 2.6)], 0.035, 'Galvanized', 6)
-        p.plate((9.0, sy, 2.2), (0.03, 0.8, 0.8), 'SignRed', rot_x=math.radians(45) if False else 0.0)
+        p.plate((9.0, sy, 2.2), (0.03, 0.8, 0.8), 'SignRed')
         p.text("STOP", 0.22, 'SignWhite', (9.0 + 0.02, sy, 2.2), '+X', offset=0.004)
         p.plate((9.0, sy, 1.5), (0.03, 1.0, 0.4), 'SignWhite')
         p.text("ID CHECK", 0.14, 'SignBlack', (9.0 + 0.02, sy, 1.5), '+X', offset=0.004)

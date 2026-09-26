@@ -188,6 +188,9 @@ class RoadPlan:
 
 @dataclass
 class StructurePlan:
+    """A building/prop request. ``size`` convention: HAS = (length along local X, span along Y, height);
+    HANGAR / FIRE_STATION / BLAST_DEFLECTOR / REVETMENT = (width along local Y, depth along local X, height);
+    everything else (x, y, z) extents. Local +X is the "front" (doors) for hangars; HAS doors face local -X."""
     kind: str
     position: Point
     rotation: float                 # radians about Z
@@ -877,7 +880,7 @@ def _place_structures(plan: Plan, s) -> None:
                 plan.structures.append(StructurePlan('ARRESTING_HOUSING', (xc, sgn * (rw.paved_half_w + ft(40))), 0.0 if sgn > 0 else math.pi, (6.0, 3.0, 2.6), {'station': xc, 'side': sgn}, "BAK-12 absorber"))
     # wash rack near the hangars
     if st.wash_rack and main is not None:
-        plan.structures.append(StructurePlan('WASH_RACK', (main.poly[0][0] - 90.0, far_y + side * 40.0), 0.0, (30.0, 30.0, 0.3), {}, "Wash rack"))
+        plan.structures.append(StructurePlan('WASH_RACK', (main.poly[1][0] + 60.0, far_y + side * 40.0), 0.0, (30.0, 30.0, 0.3), {}, "Wash rack"))
     # blast fences behind alert pads handled per apron. Beacon tower near the tower.
     if s.lighting.beacon:
         plan.structures.append(StructurePlan('BEACON', ((main_x if main else 0.0) + 300.0, back + side * 200.0), 0.0, (3.0, 3.0, 18.0), {}, "Rotating beacon"))
