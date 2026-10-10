@@ -87,6 +87,9 @@ BORDER = {1: (inch(13 / 16), inch(11 / 16)), 2: (inch(1 + 1 / 16), inch(1 + 7 / 
           3: (inch(1.25), inch(2)), 4: (inch(1.25), inch(2)), 5: (inch(1.25), inch(2))}
 ILS_SYMBOL_H = 15 / 18        # ILS pictogram height 15 in for an 18 in legend (AC 44L App. B)
 ILS_SYMBOL_L = 42 / 18        # ... length 42 in
+# vertical message divider between message elements of one housing (AC 44L §3.2.5): 1-5/16 / 1-11/16 / 2 in
+DIVIDER_W = {1: inch(1 + 5 / 16), 2: inch(1 + 11 / 16), 3: inch(2), 4: inch(2), 5: inch(2)}
+DIVIDER_MARGIN = 0.04         # divider stops 4 cm short of the face opening top / bottom
 
 # --------------------------------------------------------------------------- placement (UFC Ch. 9)
 HOLD_SIGN_SETBACK = 1.5       # sign face 0-10 ft on the holding side of the hold line (UFC 9-3): use 5 ft
@@ -112,6 +115,8 @@ SEG_CIRCLE_D = 30.0           # segmented circle 100 ft diameter (AC 150/5340-5)
 SEG_COUNT = 8
 SEG_LEN = 3.0
 SEG_W = 0.9
+WIND_SHIFT_STEP = 60.0        # a cone whose plan position lands on pavement (e.g. a mid-field connector) slides
+WIND_MAX_SHIFT = 600.0        # along the runway in 60 m steps, alternating sides, up to 600 m (keeps the >= 400 ft CL distance)
 
 # destination legend by apron kind (FAA destination signs name the destination: APRON, MIL, FUEL, CARGO...)
 APRON_DEST = {'MAIN': 'APRON', 'HANGAR_LINE': 'HANGARS', 'HAS_LOOP': 'HAS', 'ALERT': 'ALERT', 'HOT_CARGO': 'HOT CARGO',
@@ -216,6 +221,11 @@ class _Glyphs:
             seg = 48
             pts, tris = g.triangulate(g.circle((r, 0.0), r, seg))
             return pts, tris, 2 * r
+        if kind == 'DIV':
+            # message divider: full-height bar in the legend colour (one arrow per designation, AC 18H 2.10)
+            w = DIVIDER_W.get(size, inch(2))
+            hh = 0.5 * (SIGN_SIZES[size][1] - 2 * RIM) - DIVIDER_MARGIN
+            return [(0.0, -hh), (w, -hh), (w, hh), (0.0, hh)], [(0, 1, 2, 3)], w
         if kind == 'ILS':
             # ILS critical area boundary pictogram (AC 44L App. B): two rails with rungs, 15 x 42 in at Size 3
             sh, sl = ILS_SYMBOL_H * h, ILS_SYMBOL_L * h
@@ -562,7 +572,10 @@ class _Signage:
                         if tw.kind == 'ACCESS':
                             back = Face('DESTINATION', (('T', self.destination_text(tw)), ('A', 90)))
                         elif par is not None and par.name:
-                            back = Face('DIRECTION', (('A', 180), ('T', par.name.upper()), ('A', 0)))
+                            # exiting aircraft may turn either way onto the parallel: two message elements
+                            # with a divider (one arrow per designation, never bracketed - AC 18H 2.10)
+                            pn = par.name.upper()
+                            back = Face('DIRECTION', (('A', 180), ('T', pn), ('DIV',), ('T', pn), ('A', 0)))
                     panels.append(Panel(Face('MANDATORY', (('T', h.runway_text or self.runway_text()),)), back, self.size))
                     kind = 'HoldArray'
                 elif h.kind == 'B':
@@ -654,9 +667,16 @@ class _Signage:
                     panels.append(Panel(Face('DIRECTION', (('T', best_r[1].name.upper()), ('A', 0))), None, self.size))
                 if not panels:
                     continue
-                off = par.width * 0.5 + par.shoulder + s.sign_offset + PANEL_DEPTH * 0.5
+                # the array is perpendicular to the arriving connector; its near corner must clear the
+                # parallel's paved shoulder by sign_offset *measured perpendicular to the parallel*
+                # (matters for acute high-speed exits whose centreline meets the parallel at 30 deg)
+                L = self.arrays.array_length(panels)
+                ax = g.perp_left(d_end)
+                dy = max(abs(d_end[1]), 0.2)
+                reach = 0.5 * L * abs(ax[1]) + 0.5 * PANEL_DEPTH * dy     # footprint half-extent toward the parallel
+                off = (par.width * 0.5 + par.shoulder + s.sign_offset + reach) / dy
                 cx, cy = pj[0] + d_end[0] * off, pj[1] + d_end[1] * off
-                self.place_array('LocationArray', panels, cx, cy, (-d_end[0], -d_end[1]), shift_dir=d_end, shifts=(4.0, 8.0))
+                self.place_array('LocationArray', panels, cx, cy, (-d_end[0], -d_end[1]), shift_dir=d_end, shifts=(4.0, 8.0, 12.0))
 
     # ------------------------------------------------------------------ 4. destination signs on apron access stubs
     def destination_signs(self) -> None:
@@ -674,9 +694,6 @@ class _Signage:
             stub = g.length(p0, p1)
             along = max((par.width * 0.5 + par.shoulder + 4.0) if par else 0.0, stub * 0.5)
             along = min(along, stub - 4.0)
-            lateral = tw.width * 0.5 + tw.shoulder + self.s.sign_offset + PANEL_DEPTH * 0.5
-            cx = p0[0] + d[0] * along + left[0] * lateral
-            cy = p0[1] + d[1] * along + left[1] * lateral
             front = Face('DESTINATION', (('T', self.destination_text(tw)), ('A', 90)))
             # back: runway direction for aircraft leaving the apron (toward the nearest connector)
             back = None
@@ -688,6 +705,10 @@ class _Signage:
                 txt = ('T', f"RWY {self.runway_text()}")
                 back = Face('DESTINATION', ((('A', ang), txt) if ang == 180.0 else (txt, ('A', ang))))
             panels = [Panel(front, back, self.size)]
+            # panels run across the stub: the near end of the array sits sign_offset beyond the shoulder
+            lateral = tw.width * 0.5 + tw.shoulder + self.s.sign_offset + 0.5 * self.arrays.array_length(panels)
+            cx = p0[0] + d[0] * along + left[0] * lateral
+            cy = p0[1] + d[1] * along + left[1] * lateral
             self.place_array('DestinationSign', panels, cx, cy, (-d[0], -d[1]), shift_dir=d, shifts=(4.0, 8.0))
 
     # ------------------------------------------------------------------ 5. RDR + AGM row (UFC 9-6, 9-7)
@@ -744,14 +765,32 @@ class _Signage:
         mesh = self.ctx.shared_mesh("Signage_WindCone", lambda: _mesh_wind_cone(self.ctx, "Signage_WindCone"))
         primary = min(self.plan.wind_cones, key=lambda p: abs(p[0]))
         for p in self.plan.wind_cones:
-            if self.blocked(p[0], p[1], 2.0):
+            is_primary = p is primary
+            # the primary cone carries the segmented circle: keep the whole ring clear of pavement
+            clear = SEG_CIRCLE_D * 0.5 + 3.0 if is_primary else 2.0
+            pos = self.free_spot(p, clear, shift_dir=(1.0, 0.0), max_shift=WIND_MAX_SHIFT, step=WIND_SHIFT_STEP)
+            if pos is None:
                 self.skipped['WindCone'] = self.skipped.get('WindCone', 0) + 1
                 continue
-            self.place('WindCone', mesh, p[0], p[1], (1.0, 0.0), z=0.0)
-            if p is primary:
+            self.place('WindCone', mesh, pos[0], pos[1], (1.0, 0.0), z=0.0)
+            if is_primary:
                 circ = self.ctx.shared_mesh("Signage_SegmentedCircle",
                                             lambda: _mesh_segmented_circle(self.ctx, "Signage_SegmentedCircle"))
-                self.place('SegmentedCircle', circ, p[0], p[1], (1.0, 0.0), z=0.0)
+                self.place('SegmentedCircle', circ, pos[0], pos[1], (1.0, 0.0), z=0.0)
+
+    def free_spot(self, p: Point, clear: float, shift_dir: Point, max_shift: float, step: float) -> Point | None:
+        """``p`` or the nearest point along +-``shift_dir`` (alternating sides) whose ``clear`` radius is free
+        of pavement and roads; None when nothing fits within ``max_shift``."""
+        if not self.blocked(p[0], p[1], clear):
+            return p
+        s = step
+        while s <= max_shift + 1e-6:
+            for sgn in (1.0, -1.0):
+                q = (p[0] + shift_dir[0] * s * sgn, p[1] + shift_dir[1] * s * sgn)
+                if not self.blocked(q[0], q[1], clear):
+                    return q
+            s += step
+        return None
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
