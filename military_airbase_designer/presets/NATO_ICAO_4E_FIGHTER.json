@@ -54,7 +54,7 @@
       "width": 23.0,
       "shoulder_width": 7.62,
       "fillet_radius": 38.1,
-      "station": -900.0,
+      "station": -1040.0,
       "hold_distance": 67.5
     },
     {
@@ -98,7 +98,7 @@
       "width": 23.0,
       "shoulder_width": 7.62,
       "fillet_radius": 38.1,
-      "station": 900.0,
+      "station": 1040.0,
       "hold_distance": 67.5
     },
     {

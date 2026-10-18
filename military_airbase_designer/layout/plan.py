@@ -640,10 +640,15 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
         y_b = par_y - side * (par_hw + ft(40)) if host == 'PARALLEL' else side * (runway.half_w + hold_setback + a.depth)
         x_a = xc + outward * end_tw.width * 0.5
         x_b = x_a + outward * a.length
+        pitch = 1.414 * (ac['span'] + ft(10))
+        if a.spots > 0:
+            # an explicit spot count sizes the pad (the gap to the parallel taxiway is only the upper limit)
+            fit = ft(60) + pitch * a.spots
+            if fit < abs(y_b - y_a):
+                y_b = y_a + math.copysign(fit, y_b - y_a)
         poly = g.rect_xy(x_a, y_a, x_b, y_b)
         cx = (x_a + x_b) * 0.5
         # angled (45°) spots along the pad, noses pointing away from the base (toward the runway end)
-        pitch = 1.414 * (ac['span'] + ft(10))
         usable = abs(y_b - y_a) - ft(60)
         n = a.spots if a.spots > 0 else max(1, int(usable // pitch))
         num = spot_start
@@ -700,6 +705,14 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
                     for ddx, ddy in ((-ac['span'] * 0.3, -ac['length'] * 0.2), (ac['span'] * 0.3, -ac['length'] * 0.2), (0.0, ac['length'] * 0.35)):
                         tie.append((x + ddx, stop_y + side * ddy))
                     ground.append((x + ac['span'] * 0.45, stop_y))
+        if spots and kind in ('MAIN', 'HANGAR_LINE', 'ARM_DEARM', 'HOT_CARGO'):
+            # "Depth" is a maximum: trim the apron behind the last parking row (tail + wingtip clearance + margin)
+            tail = ac['length'] - ac['nose'] + ac['clearance'] * 0.5 + ft(30)
+            need = max(abs(sp.position[1] - near) for sp in spots) + tail
+            if need < a.depth:
+                far = near + side * need
+                y_near, y_far = (near, far) if near < far else (far, near)
+                poly = g.rect_xy(cx - a.length / 2, y_near, cx + a.length / 2, y_far)
         if a.hydrants:
             for i in range(per_row):
                 x = cx - usable / 2 + pitch * (i + 0.5)
@@ -746,10 +759,19 @@ def _build_apron(a, side: int, near: float, par_hw: float, par_y: float, s, runw
             num += 1
             if s.structures.revetments:
                 structures.append(StructurePlan('REVETMENT', end, math.atan2(dy, dx), (ac['span'] + 6.0, ac['length'] + 6.0, 3.6), {}, f"Revetment {num - 1}"))
+        half_w = a.length / 2
+        if spots:
+            # the apron is the envelope of the stubs (+ shelter depth and a taxiing margin), never larger than requested
+            half_w = min(half_w, max(abs(sp.position[0] - cx) for sp in spots) + ac['length'] * 0.5 + ft(60))
+            need = max(abs(sp.position[1] - near) for sp in spots) + ac['length'] * 0.6 + ft(60)
+            if need < a.depth:
+                far = near + side * need
+                y_near, y_far = (near, far) if near < far else (far, near)
+            poly = g.rect_xy(cx - half_w, y_near, cx + half_w, y_far)
+            taxilanes[0] = [(cx, near), (cx, far - side * ft(60))]
         if a.floodlights:
-            floods.extend([(cx - a.length * 0.4, far - side * ft(15)), (cx + a.length * 0.4, far - side * ft(15))])
+            floods.extend([(cx - half_w * 0.8, far - side * ft(15)), (cx + half_w * 0.8, far - side * ft(15))])
         zone = Z_APRON
-        # the apron polygon becomes the envelope of the stubs
     elif kind == 'HAS_LOOP':
         # loop taxiway; shelters both sides; the "apron" polygon is the loop pavement itself
         loop_w = ft(50)
@@ -999,6 +1021,30 @@ def _validate(plan: Plan, s) -> None:
     for t in plan.taxiways:
         if t.kind in ('CONNECTOR', 'HIGH_SPEED', 'END') and t.side not in par_sides:
             plan.warnings.append(f"Taxiway {t.name} has no parallel taxiway on its side; it ends at its own offset.")
+    # exits that cross each other or join the parallel taxiway almost at the same point
+    exits = [t for t in plan.taxiways if t.kind in ('CONNECTOR', 'HIGH_SPEED', 'END') and len(t.centerline) >= 2]
+
+    def _ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+    def _cross(a, b):
+        for i in range(len(a.centerline) - 1):
+            for j in range(len(b.centerline) - 1):
+                p1, p2, p3, p4 = a.centerline[i], a.centerline[i + 1], b.centerline[j], b.centerline[j + 1]
+                if _ccw(p1, p3, p4) != _ccw(p2, p3, p4) and _ccw(p1, p2, p3) != _ccw(p1, p2, p4):
+                    return True
+        return False
+
+    for i in range(len(exits)):
+        for j in range(i + 1, len(exits)):
+            a, b = exits[i], exits[j]
+            if a.side == b.side and _cross(a, b):
+                plan.warnings.append(f"Taxiway {a.name} crosses {b.name}: move a connector beyond the end of the high-speed exit.")
+    joined = sorted([t for t in exits if t.parallel_junction is not None], key=lambda t: t.parallel_junction[0])
+    for a, b in zip(joined, joined[1:]):
+        gap = b.parallel_junction[0] - a.parallel_junction[0]
+        if a.side == b.side and abs(gap) < 2.5 * max(a.width, b.width):
+            plan.warnings.append(f"Taxiways {a.name} and {b.name} join the parallel taxiway only {abs(gap):.0f} m apart.")
     if any(a.kind == 'HOT_CARGO' for a in plan.aprons) and any(a.kind == 'MAIN' for a in plan.aprons):
         hc = next(a for a in plan.aprons if a.kind == 'HOT_CARGO')
         mn = next(a for a in plan.aprons if a.kind == 'MAIN')

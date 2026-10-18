@@ -60,7 +60,7 @@ from . import nodegroups as NG
 __all__ = ["build_material", "refresh_textures", "texture_maps", "material_signature", "AO_FACTOR",
            "SIGN_EMISSION_SCALE", "NODE_VERSION", "MAP_ORDER", "MISSING_FRAME"]
 
-NODE_VERSION = 4
+NODE_VERSION = 5
 AO_FACTOR = 0.6                 # how much of the baked AO map is multiplied into the albedo (engines use the packed map)
 BUMP_STRENGTH = 0.12            # Height -> Bump on top of the normal map (low: the normal already encodes the same relief)
 BUMP_DISTANCE = 0.01            # m of relief for a full 0..1 Height (16-bit map, 6 mm joints / grooves)
@@ -219,6 +219,15 @@ def _load(path: str, is_data: bool) -> bpy.types.Image | None:
 
 def material_signature(spec: library.MaterialSpec, maps: dict[str, str]) -> str:
     return ";".join(sorted(maps.keys()))
+
+
+def option_signature(spec: library.MaterialSpec, settings) -> str:
+    """Settings that change the node tree itself (not just values): a material built with other options is stale."""
+    if spec.texture_set == 'Grass':
+        return "stripes=%d" % bool(_g(settings, "terrain.mowing_stripes", True))
+    if spec.emission:
+        return "em=%.3f" % _emission_strength(spec, settings)      # night mode / emission strength
+    return ""
 
 
 # --------------------------------------------------------------------------- node helpers
@@ -389,6 +398,7 @@ def _finish(mat, nt, bsdf, out, spec, settings, texture_set: str, maps: dict[str
     mat["mad_texture_set"] = texture_set or ""
     mat["mad_maps"] = material_signature(spec, maps)
     mat["mad_textured"] = 1 if textured else 0
+    mat["mad_opt"] = option_signature(spec, settings)
     mat["mad_node_version"] = NODE_VERSION
     try:
         nt.nodes.active = bsdf
@@ -533,6 +543,30 @@ def _build_textured(mat, nt, spec, settings, directory: str, maps: dict[str, str
             nt.links.new(NG.mix_result(mmix, "Result_Color"), NG.mix_socket(bmix, "A_Color"))
             nt.links.new(brng.outputs["Result"], NG.mix_socket(bmix, "B_Color"))
             color_src = NG.mix_result(bmix, "Result_Color")
+            if spec.texture_set == 'Grass' and bool(_g(settings, "terrain.mowing_stripes", True)):
+                # mowing stripes in world space: 7 m period along the runway (UV v = y / tile), soft-square profile
+                sep = _node(nt, "ShaderNodeSeparateXYZ", "MAD_StripeSep", _X_TEX, -2400, f_tex, "World y (UV v)")
+                nt.links.new(uv.outputs["UV"], sep.inputs["Vector"])
+                smul = _node(nt, "ShaderNodeMath", "MAD_StripeFreq", _X_TEX + 200, -2400, f_tex, "x 2*pi*tile/7 m")
+                smul.operation = 'MULTIPLY'
+                smul.inputs[1].default_value = 2.0 * math.pi * 8.0 / 7.0
+                nt.links.new(sep.outputs["Y"], smul.inputs[0])
+                ssin = _node(nt, "ShaderNodeMath", "MAD_StripeSin", _X_TEX + 400, -2400, f_tex, "sin")
+                ssin.operation = 'SINE'
+                nt.links.new(smul.outputs["Value"], ssin.inputs[0])
+                srng = _node(nt, "ShaderNodeMapRange", "MAD_StripeRange", _X_TEX + 600, -2400, f_tex, "-0.45..0.45 -> 0.965..1.035")
+                _set_input(srng, "From Min", -0.45)
+                _set_input(srng, "From Max", 0.45)
+                _set_input(srng, "To Min", 0.965)
+                _set_input(srng, "To Max", 1.035)
+                nt.links.new(ssin.outputs["Value"], srng.inputs["Value"])
+                smix = _node(nt, "ShaderNodeMix", "MAD_StripeMix", _X_PROC - 200, -500, f_wear, "Mowing stripes")
+                smix.data_type = 'RGBA'
+                smix.blend_type = 'MULTIPLY'
+                NG.mix_socket(smix, "Factor_Float").default_value = 1.0
+                nt.links.new(color_src, NG.mix_socket(smix, "A_Color"))
+                nt.links.new(srng.outputs["Result"], NG.mix_socket(smix, "B_Color"))
+                color_src = NG.mix_result(smix, "Result_Color")
         tint = _node(nt, "ShaderNodeMix", "MAD_Tint", _X_PROC, 250, f_wear, "Tint (spec colour / user tint)")
         tint.data_type = 'RGBA'
         tint.blend_type = 'MULTIPLY'
@@ -726,6 +760,8 @@ def build_material(spec: library.MaterialSpec, settings=None, existing: bpy.type
 def material_is_stale(spec: library.MaterialSpec, mat: bpy.types.Material, settings=None) -> bool:
     """True when ``mat`` no longer matches the texture folder / map files / node code it should use."""
     if mat.get("mad_node_version") != NODE_VERSION:
+        return True
+    if mat.get("mad_opt", "") != option_signature(spec, settings):
         return True
     if not spec.texture_set:
         return False

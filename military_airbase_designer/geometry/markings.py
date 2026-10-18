@@ -264,6 +264,9 @@ class Painter:
             for i, p in enumerate(pts):
                 b.add_vertex((p[0], p[1], z_fn(p[0], p[1], vzone[i]) + z_off + vlift[i]))
             for t in tris:
+                a_, b_, c_ = pts[t[0]], pts[t[1]], pts[t[2]]
+                if abs((b_[0] - a_[0]) * (c_[1] - a_[1]) - (c_[0] - a_[0]) * (b_[1] - a_[1])) < 2e-9:
+                    continue                      # zero-area sliver left by the union triangulation
                 # Wear = (rubber 0, dirt 0, macro neutral 0.5, paint-wear alpha)
                 cols = [(0.0, 0.0, 0.5, wear_fn(pts[i][0], pts[i][1], vzone[i])) for i in t]
                 uvs = [(pts[i][0] / 2.0, pts[i][1] / 2.0) for i in t]

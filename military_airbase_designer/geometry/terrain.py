@@ -70,6 +70,64 @@ class _PointField:
         return best
 
 
+def _direct_ground_loops(outline, outline_outer, dirt_w: float):
+    """Ground boundary loops = every shoulder loop offset away from the pavement by the dirt strip width.
+
+    Returns ``[(loop, is_outer), ...]`` or ``None`` when an offset is not trustworthy (then the band outline is used).
+    Outer loops grow, islands shrink (an island thinner than the strip vanishes)."""
+    loops: list[tuple[list, bool]] = []
+    for lp, is_outer in zip(outline, outline_outer):
+        if len(lp) < 3 or g.area(lp) < 1.0:
+            continue
+        if dirt_w <= 0.0:
+            loops.append((list(lp), bool(is_outer)))
+            continue
+        off = pv.clean_loop(pv.offset_loop_var(lp, [dirt_w] * len(lp)))
+        a0, a1 = g.area(lp), (g.area(off) if len(off) >= 3 else 0.0)
+        if is_outer:
+            if len(off) >= 3 and g.signed_area(off) > 0.0 and a1 >= a0 * 0.999:
+                loops.append((off, True))
+            else:
+                return None
+        else:
+            if len(off) >= 3 and g.signed_area(off) < 0.0 and 1.0 < a1 <= a0 * 1.001:
+                loops.append((off, False))
+            elif a1 > a0 * 1.001:
+                return None
+            # else: the island is thinner than the strip and disappears
+    return loops
+
+
+def _recover_outer_loops(outline, outline_outer, dirt, dirt_w: float) -> list[tuple[list, bool]]:
+    """Outer pavement loops whose dirt-strip outline got lost.
+
+    ``offset_band`` extracts the band outline from the CDT boundary; where the shoulder outline has tiny
+    notches (a 0.1 m jog between two hardstands) the offset pinches to zero width, the outer boundary
+    degenerates and the whole loop can vanish. Without that loop the islands (infield, loop interiors) are
+    classified as holes and the ground disappears inside them. The outer offset is computed directly instead.
+    """
+    out: list[tuple[list, bool]] = []
+    if dirt_w <= 0.0:
+        return out
+    for lp, is_outer in zip(outline, outline_outer):
+        if not is_outer or len(lp) < 3:
+            continue
+        bx0, by0, bx1, by1 = g.bbox(lp)
+        found = False
+        for dl, do in zip(dirt.outline, dirt.outline_is_outer):
+            if do and len(dl) >= 3:
+                dx0, dy0, dx1, dy1 = g.bbox(dl)
+                if dx0 <= bx0 + 1e-6 and dy0 <= by0 + 1e-6 and dx1 >= bx1 - 1e-6 and dy1 >= by1 - 1e-6:
+                    found = True
+                    break
+        if found:
+            continue
+        off = pv.clean_loop(pv.offset_loop_var(lp, [dirt_w] * len(lp)))
+        if len(off) >= 3 and g.signed_area(off) > 0.0:
+            out.append((off, True))
+    return out
+
+
 def _ditch_lines(ctx) -> list[tuple[float, float, float]]:
     """(y, x_start, x_end) of every drainage swale."""
     s = ctx.settings.terrain
@@ -125,6 +183,16 @@ def build(ctx) -> None:
     site = g.rect_xy(x0, y0, x1, y1)
     polys: list[Poly] = [site]
     kind: list[int] = [0]
+    direct = _direct_ground_loops(outline, outline_outer, dirt_w)
+    if direct is not None:
+        # the ground boundary is built from the offset loops themselves: simple, closed and nested exactly like the
+        # pavement (the band-derived outline can degenerate at sub-metre notches)
+        dirt.outline = [lp for lp, _o in direct]
+        dirt.outline_is_outer = [o for _lp, o in direct]
+    else:
+        for lp, is_outer in _recover_outer_loops(outline, outline_outer, dirt, dirt_w):
+            dirt.outline.append(lp)             # also feeds the dirt-blend ring and the distance field below
+            dirt.outline_is_outer.append(is_outer)
     for lp, is_outer in zip(dirt.outline, dirt.outline_is_outer):
         if len(lp) < 3 or g.area(lp) < 1.0:
             continue

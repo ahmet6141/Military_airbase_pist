@@ -40,7 +40,7 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 6                       # bump when the look changes so cached sets regenerate
+VERSION = 10                      # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
@@ -484,6 +484,9 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     # longitudinal joint cracking: only parts of the cold joints open up (ASTM D5340 "joint reflection")
     seam_crack = np.exp(-(d_seam / 0.006) ** 2).astype(F32) * F32(_ss(0.3, 1.0, a))
     seam_crack = seam_crack * _ss(0.42, 0.58, g.fbm(2.0, 2, 14, div=4))
+    if kind == "shoulder":
+        seam_crack = seam_crack * F32(0.0)
+        seam = seam * F32(0.0)
 
     # ---- cracks + crack seal
     # Real airfield asphalt shows (1) transverse thermal cracks every 5-12 m that wander across the lanes,
@@ -492,17 +495,22 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     crack_amt = _ss(0.1, 0.8, a)
     if a > 0.05:
         cr_res = min(g.sub_res(2), 2048)
-        cr = N.cracks(cr_res, cr_res, g.period(4.0 if kind != "shoulder" else 1.8, cr_res), g.s(6), threshold=0.05,
-                      width=0.8, octaves=4, cell_edges=0.3 if kind == "shoulder" else 0.0,
-                      coverage=(0.1 + 0.3 * a) if kind == "shoulder" else (0.03 + 0.22 * a))
-        n_trans = 2 if kind == "shoulder" else 1
-        trans = _wavy_lines(g, n_trans, 15, 'y', 0.0035, 0.09, 0.3, res=cr_res) * F32(_ss(0.3, 0.65, a))
-        cr = np.maximum(cr, trans)
-        seal_lo = N.blur(cr, max(1, int(round(0.03 * cr_res / tile))))
+        if kind == "shoulder":
+            # old narrow shoulder strips: aggregate-rich, nearly uniform, with a hairline transverse thermal crack
+            # every few metres (contour-type crack networks read as marble veins and tile visibly)
+            cr = _wavy_lines(g, 2, 15, 'y', 0.0025, 0.06, 0.45, res=cr_res) * F32(_ss(0.2, 0.6, a))
+        else:
+            # sealed cracks are long thin lines: a transverse thermal crack and a wandering longitudinal one per tile
+            # (blobby contour cracks repeat as an obvious motif on an 6 m tile)
+            trans = _wavy_lines(g, 1, 15, 'y', 0.0035, 0.09, 0.3, res=cr_res)
+            longi = _wavy_lines(g, 1, 16, 'x', 0.003, 0.07, 0.5, res=cr_res)
+            cr = np.maximum(trans, longi) * F32(_ss(0.25, 0.65, a))
+        blur_m = 0.012
+        seal_lo = N.blur(cr, max(1, int(round(blur_m * cr_res / tile))))
         seal_lo = _ss(0.06, 0.25, N.normalize01(seal_lo) if seal_lo.max() > 0 else seal_lo)
         crack = g.up(cr) * F32(crack_amt)
         seal = g.up(seal_lo) * _ss(0.35, 0.6, g.fbm(1.2, 3, 7, div=4)) * F32(crack_amt)
-        del cr, seal_lo, trans
+        del cr, seal_lo
     else:
         crack = np.zeros((res, res), F32)
         seal = crack
@@ -522,7 +530,7 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     patch_edge = np.zeros((res, res), F32)
     dust = np.zeros((res, res), F32)
     if kind == "shoulder":
-        dust = _ss(0.55, 0.85, g.fbm(2.0, 3, 11, div=4)) * F32(0.3 + 0.7 * p.dirt)
+        dust = _ss(0.5, 0.9, g.fbm(0.7, 3, 11, div=2)) * F32(0.2 + 0.5 * p.dirt)
 
     # ---- height (mm)
     h = stones * F32(1.6) + small * F32(0.6) - F32(0.4)
@@ -544,10 +552,10 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     albedo = _mul(albedo, (F32(1.0) + F32(0.04) * _signed(macro)) * (F32(1.0) + F32(0.035) * _signed(mottle)) * lane_tone * patch_tone)
     albedo = _mul(albedo, F32(1.0) - F32(0.08) * seam)
     albedo = _mul(albedo, F32(1.0) - F32(0.4) * crack)
-    albedo = _mix(albedo, _lin("#1C1C1B"), np.clip(seal + patch_edge, 0, 1) * F32(0.65))
+    albedo = _mix(albedo, _lin("#1C1C1B"), np.clip(seal + patch_edge, 0, 1) * F32(0.5))
     albedo = _mul(albedo, F32(1.0) - F32(0.55) * rub)
     if kind == "shoulder":
-        albedo = _mix(albedo, _lin("#A99E8C"), dust * F32(0.3))
+        albedo = _mix(albedo, _lin("#A99E8C"), dust * F32(0.18))
 
     # ---- roughness
     rough = F32(0.62 + 0.30 * a) + F32(0.08) * (stones - F32(0.3)) + F32(0.03) * _signed(mottle)
@@ -565,23 +573,24 @@ def _gen_grass(g: Gen) -> dict:
     p, res, tile = g.p, g.res, g.tile
     fine = g.fbm(0.06, 4, 0)
     clumps = F32(1.0) - g.worley(0.05, 1)
-    dry = _ss(0.62, 0.86, g.fbm(4.0, 3, 2, div=4))
-    dark = _ss(0.6, 0.82, g.fbm(3.0, 3, 3, div=4))
+    # fine-scale only (<= 0.6 m): anything bigger than ~1 m repeats visibly on an 8 m tile; patchiness comes from the
+    # non-repeating macro noise in the terrain shader
+    dry = _ss(0.55, 0.85, g.fbm(0.6, 3, 2, div=2))
+    dark = _ss(0.55, 0.85, g.fbm(0.45, 3, 3, div=2))
     gate = g.value(0.08, 4, div=2)
     dots = _ss(0.35, 0.1, g.worley(0.08, 5, div=2))
     clover = dots * _ss(0.8, 0.9, gate)
     dirt = dots * _ss(0.16, 0.06, gate) * F32(0.4 + 0.6 * p.dirt)
     base = _lin("#5E6E38")
-    albedo = _grey(F32(0.78) + F32(0.44) * fine, base)
-    albedo = _mul(albedo, F32(0.93) + F32(0.14) * clumps)
-    albedo = _mix(albedo, _lin("#4A5A2E"), dark * F32(0.18))
-    albedo = _mix(albedo, _lin("#8C8A55"), dry * F32(0.2))
-    albedo = _mix(albedo, _lin("#7E9448"), clover * F32(0.3))
+    albedo = _grey(F32(0.8) + F32(0.4) * fine, base)
+    albedo = _mul(albedo, F32(0.94) + F32(0.12) * clumps)
+    albedo = _mix(albedo, _lin("#4A5A2E"), dark * F32(0.16))
+    albedo = _mix(albedo, _lin("#8C8A55"), dry * F32(0.16))
+    albedo = _mix(albedo, _lin("#7E9448"), clover * F32(0.22))
     albedo = _mix(albedo, _lin("#6B5A45"), dirt * F32(0.8))
-    if p.mowing_stripes:
-        stripes_n = max(1, int(round(tile / 7.0)))                         # 2 passes of a 3.5 m mower per period
-        stripe = N.stripes(res, res, res / stripes_n, duty=0.5, axis="x", soft=0.12)
-        albedo = _mul(albedo, F32(0.94) + F32(0.12) * stripe)
+    # Mowing stripes are NOT baked into the tile: one 8 m tile cannot hold a 7 m mower period without a
+    # visible lattice once the terrain material blends a rotated second sample (anti-tiling). The shader adds them in
+    # world space instead (materials.nodes, terrain.mowing_stripes).
     h = fine * F32(20.0) + clumps * F32(15.0) - dirt * F32(10.0)
     rough = F32(0.88) + F32(0.06) * _signed(fine) - F32(0.05) * dry + F32(0.05) * dirt
     return {"albedo": albedo, "height_mm": h, "rough": np.clip(rough, 0.7, 1.0), "height_range": (-10.0, 40.0),
@@ -991,7 +1000,7 @@ TEXTURE_SETS: dict[str, TextureSetSpec] = {s.name: s for s in [
     TextureSetSpec("ApronConcrete", 12.19, lambda g: _gen_concrete(g, "apron"), _BASE_MAPS, False, "pavement",
                    _PAVE + ("slabs_per_tile", "slab_size")),
     TextureSetSpec("ShoulderAsphalt", 5.0, lambda g: _gen_asphalt(g, "shoulder"), _BASE_MAPS, False, "pavement", _PAVE),
-    TextureSetSpec("Grass", 8.0, _gen_grass, _BASE_MAPS, False, "terrain", ("dirt", "mowing_stripes")),
+    TextureSetSpec("Grass", 8.0, _gen_grass, _BASE_MAPS, False, "terrain", ("dirt",)),
     TextureSetSpec("Dirt", 4.0, _gen_dirt, _BASE_MAPS, False, "terrain", ("dirt", "wet")),
     TextureSetSpec("Gravel", 3.0, _gen_gravel, _BASE_MAPS, False, "terrain", ("wet",)),
     TextureSetSpec("PaintWear", 2.0, _gen_paint_wear, _BASE_MAPS + ("Opacity", "Mask"), True, "paint", ("age", "dirt")),

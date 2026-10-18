@@ -53,7 +53,7 @@
       "width": 22.86,
       "shoulder_width": 7.62,
       "fillet_radius": 38.1,
-      "station": -914.4
+      "station": -1280.0
     },
     {
       "name": "A3",
@@ -93,7 +93,7 @@
       "width": 22.86,
       "shoulder_width": 7.62,
       "fillet_radius": 38.1,
-      "station": 914.4
+      "station": 1280.0
     },
     {
       "name": "A7",
