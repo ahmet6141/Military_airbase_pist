@@ -60,7 +60,7 @@ from . import nodegroups as NG
 __all__ = ["build_material", "refresh_textures", "texture_maps", "material_signature", "AO_FACTOR",
            "SIGN_EMISSION_SCALE", "NODE_VERSION", "MAP_ORDER", "MISSING_FRAME"]
 
-NODE_VERSION = 5
+NODE_VERSION = 6
 AO_FACTOR = 0.6                 # how much of the baked AO map is multiplied into the albedo (engines use the packed map)
 BUMP_STRENGTH = 0.12            # Height -> Bump on top of the normal map (low: the normal already encodes the same relief)
 BUMP_DISTANCE = 0.01            # m of relief for a full 0..1 Height (16-bit map, 6 mm joints / grooves)
@@ -68,10 +68,10 @@ SIGN_EMISSION_SCALE = 0.15      # internally lit sign faces are far dimmer than 
 FLAT_ROUGH_VARIATION = 0.05     # +/- roughness noise on flat props
 FLAT_COLOR_VARIATION = 0.08     # +/- brightness noise on flat pavement / terrain
 MISSING_FRAME = "MAD_MissingTexture"
-PAINT_MASK_MAP = library.MAP_OPACITY    # PaintWear map carrying the chip / dirt / bead channels (textures.synth may override)
+PAINT_MASK_MAP = library.MAP_PAINTMASK    # PaintWear RGB map carrying the chip / dirt / bead channels (Opacity = fallback)
 
 MAP_ORDER = (library.MAP_BASECOLOR, library.MAP_NORMAL, library.MAP_ROUGHNESS, library.MAP_AO, library.MAP_HEIGHT,
-             library.MAP_METALLIC, library.MAP_OPACITY)
+             library.MAP_METALLIC, library.MAP_OPACITY, library.MAP_PAINTMASK)
 
 # columns of the node layout (x) - frames: Textures | Wear | Output
 _X_UV, _X_TEX, _X_PROC, _X_GROUP, _X_BSDF, _X_OUT = -1500, -1100, -650, -250, 150, 500
@@ -695,7 +695,15 @@ def _build_decal(mat, nt, spec, settings, images, maps, uv, bsdf, out, f_tex, f_
         return n
 
     base = img("MAD_BaseColor", library.MAP_BASECOLOR, 250, "Decal colour")
-    nt.links.new(base.outputs["Color"], bsdf.inputs["Base Color"])
+    vcol = _node(nt, "ShaderNodeVertexColor", "MAD_WearColor", _X_PROC - 200, 400, f_wear, "Vertex colour (RGB = 1, A = decal opacity)")
+    vcol.layer_name = "Wear"
+    tintmix = _node(nt, "ShaderNodeMix", "MAD_DecalTint", _X_PROC, 400, f_wear, "Atlas colour x vertex colour")
+    tintmix.data_type = 'RGBA'
+    tintmix.blend_type = 'MULTIPLY'
+    NG.mix_socket(tintmix, "Factor_Float").default_value = 1.0
+    nt.links.new(vcol.outputs["Color"], NG.mix_socket(tintmix, "A_Color"))
+    nt.links.new(base.outputs["Color"], NG.mix_socket(tintmix, "B_Color"))
+    nt.links.new(NG.mix_result(tintmix, "Result_Color"), bsdf.inputs["Base Color"])
     if library.MAP_ROUGHNESS in images:
         rough = img("MAD_Roughness", library.MAP_ROUGHNESS, -40, "Roughness")
         nt.links.new(rough.outputs["Color"], bsdf.inputs["Roughness"])
@@ -776,6 +784,171 @@ def material_is_stale(spec: library.MaterialSpec, mat: bpy.types.Material, setti
     if material_signature(spec, maps) != mat.get("mad_maps", ""):
         return True
     return bool(want_textured and os.path.normpath(mat.get("mad_texdir", "") or "") != os.path.normpath(directory))
+
+
+# --------------------------------------------------------------------------- export materials
+def _read_gray(path: str):
+    """(H, W) float32 of a data PNG (Non-Color) or None."""
+    import numpy as np
+    img = _load(path, is_data=True)
+    if img is None:
+        return None
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    return px.reshape(h, w, 4)[::-1]          # Blender rows are bottom-up
+
+
+def build_export_material(spec: library.MaterialSpec, settings, tex_out: str, gltf: bool = False,
+                          cache: dict | None = None) -> bpy.types.Material:
+    """A deliberately simple material for the FBX / glTF / OBJ exporters of ONE spec.
+
+    The render materials route colour / normal through node groups, a Bump node and vertex-colour masks, which the
+    exporters cannot read (glTF took the Height map as normal map, FBX / OBJ lost every colour). This one has direct
+    image -> socket links only, constant defaults on every socket, and PNGs written to ``tex_out`` where the shader
+    needs a channel that Blender cannot express directly: RGBA paint / cut-out maps (flat colour + Opacity as alpha)
+    and, with ``gltf``, OpenGL (+Y) normal maps, the vertex-colour multiply of the decal sheet (per-decal opacity
+    arrives as COLOR_0) and a rounded alpha, which the glTF exporter writes as alphaMode MASK. FBX / OBJ link the
+    image alpha directly (OBJ writes it as ``map_d``). ``cache`` shares the baked files between materials of one export."""
+    import numpy as np
+    io = _io()
+    cache = cache if cache is not None else {}
+    mat = bpy.data.materials.new(library.material_name(spec.name) + "__export")
+    nt = _ensure_tree(mat)
+    nt.nodes.clear()
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.name = "MAD_BSDF"
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    out.name = "MAD_Output"
+    out.location = (400, 0)
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    base = _base_color(spec, settings)
+    _set_input(bsdf, "Base Color", base)
+    _set_input(bsdf, "Roughness", spec.roughness)
+    _set_input(bsdf, "Metallic", spec.metallic)
+    if "Specular IOR Level" in bsdf.inputs:
+        _set_input(bsdf, "Specular IOR Level", spec.specular)
+    if spec.emission:
+        _set_input(bsdf, "Emission Color", C.hex_to_linear(spec.emission))
+    _set_input(bsdf, "Emission Strength", _emission_strength(spec, settings))
+
+    maps: dict[str, str] = {}
+    if spec.texture_set and bool(_g(settings, "materials.generate_textures", True)):
+        _, maps = texture_maps(spec.texture_set, settings)
+    uv = nt.nodes.new("ShaderNodeUVMap")
+    uv.uv_map = "UVMap"
+    uv.location = (-900, 0)
+
+    def image(path: str, is_data: bool, y: float, label: str):
+        img = _load(path, is_data=is_data)
+        if img is None:
+            return None
+        n = nt.nodes.new("ShaderNodeTexImage")
+        n.image = img
+        n.label = label
+        n.location = (-600, y)
+        n.extension = 'REPEAT'
+        nt.links.new(uv.outputs["UV"], n.inputs["Vector"])
+        return n
+
+    is_decal = 'decal' in spec.tags
+    cut = spec.alpha == 'MASKED'
+    y = 300
+    if is_decal and library.MAP_BASECOLOR in maps:
+        n = image(maps[library.MAP_BASECOLOR], False, y, "Decal colour (RGBA)")
+        if n is not None:
+            if gltf:
+                vc = nt.nodes.new("ShaderNodeVertexColor")
+                vc.layer_name = "Wear"
+                vc.location = (-600, 600)
+                mix = nt.nodes.new("ShaderNodeMix")
+                mix.data_type = 'RGBA'
+                mix.blend_type = 'MULTIPLY'
+                mix.location = (-250, 400)
+                NG.mix_socket(mix, "Factor_Float").default_value = 1.0
+                nt.links.new(vc.outputs["Color"], NG.mix_socket(mix, "A_Color"))
+                nt.links.new(n.outputs["Color"], NG.mix_socket(mix, "B_Color"))
+                nt.links.new(NG.mix_result(mix, "Result_Color"), bsdf.inputs["Base Color"])
+                mul = nt.nodes.new("ShaderNodeMath")        # atlas alpha x per-decal opacity (vertex alpha -> COLOR_0.a)
+                mul.operation = 'MULTIPLY'
+                mul.location = (-250, 100)
+                nt.links.new(n.outputs["Alpha"], mul.inputs[0])
+                nt.links.new(vc.outputs["Alpha"], mul.inputs[1])
+                nt.links.new(mul.outputs["Value"], bsdf.inputs["Alpha"])
+            else:
+                nt.links.new(n.outputs["Color"], bsdf.inputs["Base Color"])
+                nt.links.new(n.outputs["Alpha"], bsdf.inputs["Alpha"])
+    elif cut and library.MAP_OPACITY in maps:
+        # flat spec colour + Opacity as alpha in ONE RGBA file: the only layout every exporter understands
+        key = ("cut", spec.name)
+        path = cache.get(key)
+        if path is None:
+            opa = _read_gray(maps[library.MAP_OPACITY])
+            if opa is not None:
+                rgb = [c for c in _hex_srgb(spec.color)]
+                arr = np.empty(opa.shape[:2] + (4,), dtype=np.float32)
+                arr[..., 0], arr[..., 1], arr[..., 2] = rgb
+                arr[..., 3] = opa[..., 0]
+                path = os.path.join(tex_out, f"{C.TEX_PREFIX}{spec.texture_set}_{spec.name}_Cutout.png")
+                io.save_png(arr, path, colorspace='sRGB')
+                cache[key] = path
+        n = image(path, False, y, "Colour + opacity (RGBA)") if path else None
+        if n is not None:
+            nt.links.new(n.outputs["Color"], bsdf.inputs["Base Color"])
+            if gltf:
+                rnd = nt.nodes.new("ShaderNodeMath")
+                rnd.operation = 'ROUND'                 # the glTF exporter reads round() as an alpha clip: alphaMode MASK
+                rnd.location = (-250, -150)
+                nt.links.new(n.outputs["Alpha"], rnd.inputs[0])
+                nt.links.new(rnd.outputs["Value"], bsdf.inputs["Alpha"])
+            else:
+                nt.links.new(n.outputs["Alpha"], bsdf.inputs["Alpha"])
+    elif library.MAP_BASECOLOR in maps and not cut:
+        n = image(maps[library.MAP_BASECOLOR], False, y, "BaseColor")
+        if n is not None:
+            nt.links.new(n.outputs["Color"], bsdf.inputs["Base Color"])
+    y -= 300
+    if library.MAP_ROUGHNESS in maps:
+        n = image(maps[library.MAP_ROUGHNESS], True, y, "Roughness")
+        if n is not None:
+            nt.links.new(n.outputs["Color"], bsdf.inputs["Roughness"])
+    y -= 300
+    if library.MAP_METALLIC in maps and spec.metallic > 0.0:
+        n = image(maps[library.MAP_METALLIC], True, y, "Metallic")
+        if n is not None:
+            nt.links.new(n.outputs["Color"], bsdf.inputs["Metallic"])
+    y -= 300
+    if library.MAP_NORMAL in maps and not is_decal:
+        npath = maps[library.MAP_NORMAL]
+        if gltf and bool(_g(settings, "materials.normal_directx", True)):
+            key = ("normal_gl", spec.texture_set)
+            gl_path = cache.get(key)
+            if gl_path is None:
+                nrm = _read_gray(npath)
+                if nrm is not None:
+                    nrm = nrm.copy()
+                    nrm[..., 1] = 1.0 - nrm[..., 1]      # DirectX (Y-) -> OpenGL (Y+): glTF requires +Y
+                    gl_path = os.path.join(tex_out, f"{C.TEX_PREFIX}{spec.texture_set}_Normal_GL.png")
+                    io.save_png(nrm[..., :3], gl_path, colorspace='Non-Color')
+                    cache[key] = gl_path
+            npath = gl_path or npath
+        n = image(npath, True, y, "Normal")
+        if n is not None:
+            nm = nt.nodes.new("ShaderNodeNormalMap")
+            nm.location = (-250, y)
+            nm.uv_map = "UVMap"
+            nm.inputs["Strength"].default_value = float(spec.normal_strength)
+            nt.links.new(n.outputs["Color"], nm.inputs["Color"])
+            nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
+    _apply_material_settings(mat, spec, settings, base)
+    mat["mad_spec"] = spec.name
+    mat["mad_export"] = 1
+    return mat
+
+
+def _hex_srgb(hex_str: str) -> tuple[float, float, float]:
+    h = hex_str.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
 def refresh_textures(settings=None, force: bool = False, sets=None) -> list[str]:

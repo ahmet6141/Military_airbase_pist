@@ -40,7 +40,7 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 13                      # bump when the look changes so cached sets regenerate
+VERSION = 14                      # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
@@ -1157,6 +1157,9 @@ def _finish(g: Gen, out: dict) -> dict[str, np.ndarray]:
         maps["Opacity"] = np.clip(out["opacity"], 0.0, 1.0).astype(F32)
     if "mask" in out:
         maps["Mask"] = np.clip(out["mask"], 0.0, 1.0).astype(F32)
+    if g.spec.name == "Decals" and "Opacity" in maps:
+        # engines that ignore the separate Opacity map (FBX / OBJ / glTF) still get the decal shape from the PNG alpha
+        maps["BaseColor"] = np.concatenate([maps["BaseColor"], maps["Opacity"][..., None]], axis=2)
     maps.update(texio.pack_maps(p.engine, ao, rough, metallic if isinstance(metallic, np.ndarray) else float(metallic)))
     return maps
 

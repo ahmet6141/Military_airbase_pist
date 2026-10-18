@@ -55,7 +55,7 @@ class DecalSheet:
     """Collects decal strips into one mesh."""
 
     def __init__(self, z_fn: Callable[[float, float], float]):
-        self.b = MeshBuilder(default_color=(0.0, 0.0, 0.5, 1.0))
+        self.b = MeshBuilder(default_color=(1.0, 1.0, 1.0, 1.0))
         self.z_fn = z_fn
         self.count = 0
 
@@ -70,7 +70,7 @@ class DecalSheet:
         if total < 1e-3:
             return
         u0, v0, u1, v1 = _cell_uv(cell)
-        col = (0.0, 0.0, 0.5, max(0.0, min(1.0, alpha)))
+        col = (1.0, 1.0, 1.0, max(0.0, min(1.0, alpha)))      # RGB 1: multiplies into the atlas colour (glTF COLOR_0)
         left_ids: list[int] = []
         right_ids: list[int] = []
         us: list[float] = []

@@ -136,6 +136,20 @@ resolution (<= 512 px) and their materials rebuilt; `materials.preview_only` the
 outdated by resolution alone). `library.get_material` rebuilds a material whenever it is stale: the
 texture folder, the set of map files on disk, the textured/flat state or the node code version changed.
 
+### 4.2 Export materials (`ops/export_ops.py`, `materials.nodes.build_export_material`)
+The render shaders (wear-blend node groups, Bump on Height, masked paint, vertex-colour masks) are not
+readable by the FBX / glTF / OBJ exporters, so `export_base` swaps them for simple per-spec materials on
+the *temporary* export meshes only (the scene is restored in `finally`): direct image -> socket links,
+constants on every socket, same `M_MAD_*` names.
+* Paint (`MASKED`): one RGBA PNG `T_MAD_PaintWear_<Paint>_Cutout.png` (flat colour in RGB, Opacity as alpha).
+  glTF round()s the alpha so the exporter writes `alphaMode: MASK`; FBX / OBJ link the alpha directly (`map_d`).
+* glTF normal maps: `T_MAD_<Set>_Normal_GL.png` (green flipped from DirectX when `normal_directx`).
+* Decals: RGBA BaseColor atlas; glTF multiplies a vertex colour (RGB 1, A = per-decal opacity) into colour
+  and alpha, so `COLOR_0` exists on the decal mesh only (`export_vertex_color='MATERIAL'`).
+* `_LODn` / `UCX_` objects are an FBX convention; glTF / OBJ export the render meshes only (warning).
+* Baked files go to `<export>/Textures` next to the copied sets; a warning is raised when the shipped sets were
+  generated at preview resolution (`synth.below_resolution`).
+
 ## 5. UI (`ui/panels.py`)
 N-panel tab **Airbase**: main panel with preset menu, "Build Full Base", "Rebuild", "Clear",
 live-update toggle, warnings box; sub-panels (DEFAULT_CLOSED): Runway, Markings, Decals & Wear, Taxiways

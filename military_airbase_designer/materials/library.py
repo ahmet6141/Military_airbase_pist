@@ -121,6 +121,7 @@ MAP_AO = "AO"
 MAP_HEIGHT = "Height"
 MAP_METALLIC = "Metallic"
 MAP_OPACITY = "Opacity"
+MAP_PAINTMASK = "Mask"       # PaintWear RGB mask: R chips (intact), G dirt, B glass-bead sparkle
 MAP_ORM = "ORM"              # Unreal: R=AO G=Roughness B=Metallic
 MAP_MASK = "MaskMap"         # Unity HDRP: R=Metallic G=AO B=Detail A=Smoothness
 MAP_METALSMOOTH = "MetallicSmoothness"   # Unity URP: RGB=Metallic A=Smoothness

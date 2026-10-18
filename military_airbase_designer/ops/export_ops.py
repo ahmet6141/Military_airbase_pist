@@ -66,6 +66,7 @@ from mathutils import Matrix, Vector
 from ..core import constants as C
 from ..core import scene_utils as su
 from ..materials import library
+from ..materials import nodes as matnodes
 from ..textures import io as texio
 
 # --------------------------------------------------------------------------- conventions
@@ -429,12 +430,19 @@ def _box_mesh(name: str, me: bpy.types.Mesh, tmp: _TempScene) -> bpy.types.Mesh:
 
 # --------------------------------------------------------------------------- export set construction
 def build_export_set(context, root: bpy.types.Object, objects: Sequence[bpy.types.Object], settings, tmp: _TempScene,
-                     warnings: list[str], scale: float = 1.0) -> list[ExportItem]:
-    """Create the temporary, engine-named objects (joined / baked / LOD / UCX) for the given scene objects."""
+                     warnings: list[str], scale: float = 1.0, fmt: str = 'FBX') -> list[ExportItem]:
+    """Create the temporary, engine-named objects (joined / baked / LOD / UCX) for the given scene objects.
+
+    ``_LODn`` / ``UCX_`` objects are an FBX convention (Unreal / Unity import them as LODs and collision); in glTF /
+    OBJ they would arrive as ordinary visible meshes, so those formats export the render meshes only."""
     join = bool(_get(settings, "join_by_category", True))
     lods = bool(_get(settings, "lods", True))
     lod_count = int(_get(settings, "lod_count", 3))
     collision = bool(_get(settings, "collision", True))
+    if fmt != 'FBX' and (lods and lod_count > 1 or collision):
+        dropped = " and ".join(n for n, on in (("LODs", lods and lod_count > 1), ("UCX collision", collision)) if on)
+        warnings.append(f"{dropped} skipped: only the FBX export writes LOD / UCX_ objects ({fmt} would import them as visible meshes)")
+        lods = collision = False
     decals = bool(_get(settings, "export_markings_as_decals", True))
     S = Matrix.Scale(scale, 4)
     cache: dict[str, bpy.types.Mesh] = {}
@@ -603,6 +611,72 @@ def copy_textures(out_dir: str, materials: Sequence[bpy.types.Material], tex_dir
     return copied, retarget
 
 
+class _ExportMaterials:
+    """Swaps the render materials on the temporary export meshes for simple exporter-friendly ones and puts the
+    scene back afterwards.
+
+    The render materials (wear-blend node groups, Bump on Height, masked paint, vertex-colour masks) are not
+    something the FBX / glTF / OBJ exporters can read: glTF took the Height map as normal map, paint arrived
+    as a grey opacity mask and FBX / OBJ lost every colour. The export material of each spec has direct
+    image -> socket links only (``matnodes.build_export_material``) and takes the render material's name."""
+
+    def __init__(self):
+        self.pairs: list[tuple[bpy.types.Material, bpy.types.Material, str]] = []
+        self.images_before = set(bpy.data.images.keys())
+
+    def apply(self, items: Sequence[ExportItem], settings, tex_out: str, gltf: bool,
+              warnings: list[str]) -> list[bpy.types.Material]:
+        os.makedirs(tex_out, exist_ok=True)
+        cache: dict = {}
+        made: dict[bpy.types.Material, bpy.types.Material] = {}
+        meshes: list[bpy.types.Mesh] = []
+        for it in items:
+            if it.ob.data not in meshes:
+                meshes.append(it.ob.data)
+        result: list[bpy.types.Material] = []
+        for me in meshes:
+            for i, mat in enumerate(me.materials):
+                if mat is None:
+                    continue
+                em = made.get(mat)
+                if em is None:
+                    spec = _spec_of(mat)
+                    em = mat
+                    if spec is not None:
+                        try:
+                            em = matnodes.build_export_material(spec, settings, tex_out, gltf, cache)
+                        except Exception as exc:  # noqa: BLE001 - fall back to the render material, never lose the export
+                            traceback.print_exc()
+                            warnings.append(f"{mat.name}: simplified export material failed ({exc}); exported as built")
+                            em = mat
+                        if em is not mat:
+                            wanted = mat.name
+                            mat.name = wanted + "__mad_src"
+                            em.name = wanted
+                            self.pairs.append((mat, em, wanted))
+                    made[mat] = em
+                me.materials[i] = em
+                if em not in result:
+                    result.append(em)
+        return result
+
+    def restore(self) -> None:
+        for mat, em, wanted in reversed(self.pairs):
+            try:
+                bpy.data.materials.remove(em)
+            except (ReferenceError, RuntimeError):
+                pass
+            try:
+                mat.name = wanted
+            except ReferenceError:
+                pass
+        self.pairs.clear()
+        for name in set(bpy.data.images.keys()) - self.images_before:
+            img = bpy.data.images.get(name)
+            if img is not None and img.users == 0:
+                bpy.data.images.remove(img)
+
+
 # --------------------------------------------------------------------------- exporters
 def _fbx_kwargs(filepath: str, axis: str, scale_cm: bool, path_mode: str) -> dict:
     fwd, up = FBX_AXIS.get(axis, FBX_AXIS['UNREAL'])
@@ -633,7 +707,7 @@ def _gltf_kwargs(filepath: str, fmt: str, axis: str) -> dict:
               use_selection=True, use_visible=False, use_renderable=False, use_active_collection=False,
               export_apply=True, export_texcoords=True, export_normals=True, export_tangents=False,
               export_materials='EXPORT', export_image_format='AUTO', export_attributes=True,
-              export_vertex_color='ACTIVE', export_all_vertex_colors=True, export_active_vertex_color_when_no_material=True,
+              export_vertex_color='MATERIAL', export_all_vertex_colors=False, export_active_vertex_color_when_no_material=False,
               export_yup=True, export_extras=False, export_cameras=False, export_lights=False,
               export_animations=False, export_skins=False, export_morph=False, export_texture_dir=TEXTURE_SUBDIR,
               export_keep_originals=False, export_unused_images=False, will_save_settings=False)
@@ -823,14 +897,34 @@ def write_readme(out_dir: str, export_settings, mat_settings, base_file: str, n_
         "Godot:  import the .glb/.gltf (recommended) or FBX (Godot 4 ufbx). Y-up, metres; textures import with 'Normal Map' = OpenGL.",
         f"Material recipe ({engine}): BaseColor (sRGB) -> Base Color; Normal (linear, {'DirectX' if directx else 'OpenGL'}) -> Normal;",
         f"        {packed or 'Roughness / AO / Metallic'} -> {channels}; Height (16-bit) -> displacement/parallax (optional);",
-        "        vertex colour 'Wear': R rubber deposits, G edge dirt, B macro variation, A paint wear (markings alpha mask).",
-        "        Pavement/terrain UVs are world-planar (tile size in material_index.json); paint materials use alpha mask (MASKED/dithered);",
-        "        the MAD_Decals sheet is alpha-BLENDED (Opacity x vertex alpha), no shadow casting, UVs index the 4x4 T_MAD_Decals atlas.",
+        "Exported materials are simplified for the exporter (the Blender wear-blend shaders are not exported): plain image -> socket links,",
+        "        the same M_MAD_* names. Paint (PaintWhite / Red / Yellow / Black): T_MAD_PaintWear_<Paint>_Cutout.png = flat paint colour in RGB +",
+        "        coverage in alpha (glTF alphaMode MASK, OBJ map_d); the PaintWear 'Mask' map (R chips, G dirt, B bead sparkle) is shipped for custom shaders.",
+        "        glTF additionally gets T_MAD_<Set>_Normal_GL.png (OpenGL / +Y, the glTF convention) as its normal map.",
+        "        Pavement / terrain UVs are world-planar (tile size in material_index.json). The MAD_Decals sheet is alpha-BLENDED, no shadow casting,",
+        "        UVs index the 4x4 T_MAD_Decals atlas (RGBA BaseColor); glTF carries the per-decal opacity in COLOR_0 alpha (only that mesh has COLOR_0).",
+        "        FBX / OBJ keep the vertex colour layer 'Wear' (R rubber, G edge dirt, B macro variation, A paint wear) for custom shaders.",
     ]
     path = os.path.join(out_dir, README_FILE)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     return path
+
+
+def _warn_preview_textures(materials: Sequence[bpy.types.Material], mat_settings, tex_dir: str | None,
+                           warnings: list[str]) -> None:
+    """A build writes preview-resolution (<= 512 px) sets; the game asset should not ship them unnoticed."""
+    if not tex_dir or not os.path.isdir(tex_dir):
+        return
+    try:
+        from ..textures import synth
+        used = sorted({s.texture_set for s in (_spec_of(m) for m in materials) if s is not None and s.texture_set})
+        want = int(_get(mat_settings, "resolution", 2048))
+        if used and synth.below_resolution(tex_dir, want, names=used):
+            warnings.append(f"textures are below the chosen {want} px (preview resolution of the build): run "
+                            "'Generate Textures' before exporting for full-quality maps")
+    except Exception:  # noqa: BLE001 - advisory only
+        traceback.print_exc()
 
 
 # --------------------------------------------------------------------------- main entry point
@@ -866,9 +960,10 @@ def export_base(context, root: bpy.types.Object, directory: str | None = None, s
     scene = context.scene
     context.view_layer.update()
     tmp = _TempScene(scene)
+    export_mats = _ExportMaterials()
     retarget: dict[bpy.types.Image, str] = {}
     try:
-        items = build_export_set(context, root, objects, settings, tmp, warnings, scale=100.0 if scale_cm else 1.0)
+        items = build_export_set(context, root, objects, settings, tmp, warnings, scale=100.0 if scale_cm else 1.0, fmt=fmt)
         for wanted, used in tmp.renamed:
             warnings.append(f"name clash: an object '{wanted}' already exists in the file, exported as '{used}'")
         for it in items:
@@ -878,11 +973,9 @@ def export_base(context, root: bpy.types.Object, directory: str | None = None, s
         if not items:
             result["report"] = "Nothing to export: all meshes were empty"
             return result
-        materials = []
-        for it in items:
-            for m in it.ob.data.materials:
-                if m is not None and m not in materials:
-                    materials.append(m)
+        materials = export_mats.apply(items, root.mad, os.path.join(out_dir, TEXTURE_SUBDIR),
+                                      fmt in ('GLTF', 'GLTF_SEP'), warnings)
+        _warn_preview_textures(materials, mat_settings, tex_dir, warnings)
         copied: list[str] = []
         copy_tex = bool(_get(settings, "copy_textures", True))
         if copy_tex:
@@ -922,6 +1015,7 @@ def export_base(context, root: bpy.types.Object, directory: str | None = None, s
         print("MAD export:", report)
         return result
     finally:
+        export_mats.restore()
         tmp.cleanup()
 
 
