@@ -40,7 +40,7 @@ class MAD_PT_main(bpy.types.Panel):
         s = root.mad
         box = layout.box()
         row = box.row(align=True)
-        row.label(text=s.base_name or root.name, icon='OUTLINER_OB_EMPTY')
+        row.prop(s, "base_name", text="", icon='OUTLINER_OB_EMPTY')
         if s.preset_name:
             row.label(text=s.preset_name)
         row = box.row(align=True)
@@ -105,7 +105,6 @@ class MAD_PT_runway(_SubPanel, bpy.types.Panel):
         col.prop(rw, "width")
         col.prop(rw, "heading")
         col.prop(rw, "suffix")
-        col.prop(rw, "runway_class")
         layout.separator()
         col = layout.column(align=True)
         col.prop(rw, "surface")
@@ -301,7 +300,6 @@ class MAD_PT_aprons(_SubPanel, bpy.types.Panel):
             col.prop(a, "spots")
         if a.kind in ('MAIN', 'HANGAR_LINE'):
             col.prop(a, "rows")
-            col.prop(a, "lead_in_radius")
         if a.kind == 'HAS_LOOP':
             col.prop(a, "shelters")
         col = layout.column(align=True)
@@ -392,7 +390,6 @@ class MAD_PT_structures(_SubPanel, bpy.types.Panel):
         layout.active = st.enabled
         col = layout.column(align=True)
         col.prop(st, "has_style")
-        col.prop(st, "has_layout")
         col.prop(st, "camouflage")
         col.prop(st, "revetments")
         layout.separator()

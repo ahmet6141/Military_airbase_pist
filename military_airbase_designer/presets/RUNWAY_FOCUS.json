@@ -151,9 +151,7 @@
     "sign_size": 3
   },
   "structures": {
-    "enabled": false,
-    "navaids": true,
-    "arresting_housings": true
+    "enabled": false
   },
   "perimeter": {
     "enabled": false

@@ -31,7 +31,7 @@ from typing import Callable, Sequence
 from mathutils import Vector
 
 from ..core import geom2d as g
-from ..core.constants import LT
+from ..core.constants import LT, MK
 from ..core.meshbuild import MeshBuilder
 from ..core.units import ft, inch
 from ..layout import plan as P
@@ -624,10 +624,16 @@ class _Lighting:
 
         The +X lens beams toward +X and is seen by an aircraft rolling toward the LOW end,
         whose remaining distance is x - thr_low; the -X lens is seen by traffic rolling toward
-        the HIGH end (remaining thr_high - x). Last 2,000 ft amber (UFC §4-2.3)."""
+        the HIGH end (remaining thr_high - x). Amber on instrument runways only: the last 2,000 ft or half the
+        runway, whichever is less (UFC 3-535-01 §4-2.3, FAA AC 150/5340-30)."""
         rw = self.rw
+        s = self.s
+        instrument = bool(rw.ils_low or rw.ils_high or getattr(s, 'als_low', 'NONE') != 'NONE' or getattr(s, 'als_high', 'NONE') != 'NONE')
+        if not instrument:
+            return M_WHITE
+        zone = min(LT.caution_zone, (rw.thr_high - rw.thr_low) / 2.0)
         remaining = (x - rw.thr_low) if facing > 0 else (rw.thr_high - x)
-        return M_YELLOW if remaining <= LT.caution_zone + 1e-6 else M_WHITE
+        return M_YELLOW if remaining <= zone + 1e-6 else M_WHITE
 
     def _fillet_openings(self) -> dict[int, list[tuple[float, float]]]:
         out: dict[int, list[tuple[float, float]]] = {1: [], -1: []}
@@ -687,10 +693,13 @@ class _Lighting:
                 red = (not displaced) and from_edge < LT.end_count_per_side   # two groups of 5 red end lights
                 toward_rw = M_RED if red else None
                 self._bidir_fixture(x_thr, y, toward_approach=M_GREEN, toward_runway=toward_rw, approach_dir=a, kind='Threshold')
-            # wing bars: 8 green lights at 5 ft, 40 ft outboard each side
+            # wing bars over 40 ft outboard of each edge-light line: HIRL 8 lights at 5 ft (UFC §4-4.2),
+            # MIRL 4 lights at 10 ft (UFC §4-4.3)
+            wing_sp = LT.threshold_spacing if self.s.edge == 'MIRL' else THR_WING_SPACING
+            wing_n = max(1, int(round(ft(40) / wing_sp)))
             for side in (1, -1):
-                for k in range(1, LT.threshold_wingbar + 1):
-                    y = side * (ye + k * THR_WING_SPACING)
+                for k in range(1, wing_n + 1):
+                    y = side * (ye + k * wing_sp)
                     self._bidir_fixture(x_thr, y, toward_approach=M_GREEN, toward_runway=None, approach_dir=a, kind='Threshold')
             if displaced:
                 # red runway end lights at the pavement end, 2 groups of 5 at 5 ft
@@ -894,12 +903,14 @@ class _Lighting:
         rw = self.rw
         cl = tw.centerline
         pts = g.resample_polyline(cl, LT.taxi_cl_spacing)
-        hold_a = next((h for h in tw.hold_lines if h.kind == 'A'), None)
-        hold_dist = _arc_length_at(cl, hold_a.center) if hold_a else -1.0
+        holds = [_arc_length_at(cl, h.center) for h in tw.hold_lines]       # hold positions A and B (ILS critical area)
+        coded = bool(holds)
+        hold_dist = max(holds) if holds else -1.0
         gg = self.inpav(M_GREEN, M_GREEN)
         yy = self.inpav(M_YELLOW, M_YELLOW)
         acc = 0.0
         idx = 0
+        coding_done = False
         for i, p in enumerate(pts):
             if i > 0:
                 acc += g.length(pts[i - 1], p)
@@ -908,9 +919,12 @@ class _Lighting:
             if not self.pav.inside(p, margin=0.5):
                 continue                           # only where there is taxiway pavement
             mesh = gg
-            if hold_a and acc < hold_dist:         # between runway and hold line: alternating green / yellow
+            if coded and not coding_done:          # runway CL -> farthest hold + one light: alternating green / yellow
                 mesh = yy if idx % 2 else gg
                 idx += 1
+                if acc > hold_dist:                # the first fixture beyond the hold position is yellow (UFC §5-3.2.3)
+                    mesh = yy
+                    coding_done = True
             self.place('TaxiCL', mesh, p[0], p[1], self.z(p[0], p[1]), 0.0)
 
     # ------------------------------------------------------------------ 8. hold positions: RGL + stop bars (UFC §5-5, §5-6)
@@ -929,7 +943,10 @@ class _Lighting:
                         x, y = h.center[0] + n[0] * off * sign, h.center[1] + n[1] * off * sign
                         self.place('GuardLight', self.guard(), x, y, self.z(x, y), rot)
                 if s.stop_bars:
-                    cx, cy = h.center[0] + d[0] * STOP_BAR_SETBACK, h.center[1] + d[1] * STOP_BAR_SETBACK
+                    # 2 ft on the HOLDING side of the marking, measured from its holding-side edge (UFC §5-6.3)
+                    lw = MK.hold_a_line if self.ctx.settings.markings.hold_line_width == '6' else MK.hold_a_line_faa
+                    back = 3.5 * lw + STOP_BAR_SETBACK
+                    cx, cy = h.center[0] - d[0] * back, h.center[1] - d[1] * back
                     k = int((tw.width * 0.5 - ft(2) - INPAV_R) // STOP_BAR_PITCH)
                     n_l = 2 * k + 1
                     self.place('StopBar', self.inpav_row(n_l, STOP_BAR_PITCH, M_RED), cx, cy, self.z(cx, cy), rot)

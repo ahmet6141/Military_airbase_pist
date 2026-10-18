@@ -564,10 +564,11 @@ def _arc_length_to_y(cl: list[Point], y: float) -> float:
 
 
 def _in_ils_critical_area(runway: RunwayPlan, station: float) -> bool:
-    """TDZ critical area: 3,200 ft from the runway end of an ILS end (UFC Fig 6-5)."""
-    if runway.ils_low and station < -runway.half_len + ft(3200):
+    """ILS TDZ critical area: 3,200 ft long starting 200 ft beyond the runway end, i.e. 3,000 ft along the runway from
+    that end (UFC 3-260-04 Fig 6-6)."""
+    if runway.ils_low and station < -runway.half_len + ft(3000):
         return True
-    if runway.ils_high and station > runway.half_len - ft(3200):
+    if runway.ils_high and station > runway.half_len - ft(3000):
         return True
     return False
 
@@ -923,7 +924,12 @@ def _place_structures(plan: Plan, s) -> None:
 def _place_navaids(plan: Plan, s) -> None:
     rw = plan.runway
     far = -plan.airside
-    if not s.structures.navaids:
+    # wind cones belong to the signage module (Signage > Wind cones): near each end and mid-field on the far side,
+    # independent of Structures / Navaids
+    if s.signage.enabled and s.signage.wind_cones:
+        plan.wind_cones = [(rw.thr_low + ft(1500), far * (rw.half_w + ft(350))), (rw.thr_high - ft(1500), far * (rw.half_w + ft(350))),
+                           (0.0, plan.airside * (rw.half_w + ft(350)))]
+    if not (s.structures.enabled and s.structures.navaids):       # same condition as builder._module_enabled('navaids')
         return
     # ILS for the low end: localizer beyond the HIGH end, glide slope near the low threshold
     if rw.ils_low:
@@ -935,9 +941,6 @@ def _place_navaids(plan: Plan, s) -> None:
     plan.navaids.append(StructurePlan('TACAN', (ft(1500), far * (rw.half_w + ft(700))), 0.0, (6.0, 6.0, 8.0), {}, "TACAN"))
     plan.navaids.append(StructurePlan('RADAR', (-ft(1500), far * (rw.half_w + ft(900))), 0.0, (8.0, 8.0, 10.0), {}, "Surveillance radar"))
     plan.navaids.append(StructurePlan('AWOS', (ft(300), far * (rw.half_w + ft(500))), 0.0, (2.0, 2.0, 10.0), {}, "Weather sensors"))
-    # wind cones: near each end and mid-field on the far side
-    plan.wind_cones = [(rw.thr_low + ft(1500), far * (rw.half_w + ft(350))), (rw.thr_high - ft(1500), far * (rw.half_w + ft(350))),
-                       (0.0, plan.airside * (rw.half_w + ft(350)))]
     # RSU-style supervisory position omitted (training bases only)
 
 

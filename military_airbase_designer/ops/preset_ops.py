@@ -31,6 +31,9 @@ class MAD_OT_apply_preset(bpy.types.Operator):
         except KeyError:
             self.report({'ERROR'}, tr("Preset not found: {name}").format(name=self.identifier))
             return {'CANCELLED'}
+        except (ValueError, OSError) as exc:      # corrupt / unreadable user preset (JSONDecodeError is a ValueError)
+            self.report({'ERROR'}, tr("Preset not found: {name}").format(name=self.identifier) + f" ({exc})")
+            return {'CANCELLED'}
         builder.build_base(root)
         self.report({'INFO'}, tr("Preset applied: {name}").format(name=root.mad.preset_name))
         return {'FINISHED'}
@@ -96,6 +99,8 @@ class MAD_MT_presets(bpy.types.Menu):
                 layout.operator("mad.apply_preset", text=label, icon='FILE').identifier = ident
         layout.separator()
         layout.operator("mad.save_preset", icon='ADD')
+        if user:
+            layout.menu("MAD_MT_delete_presets", icon='TRASH')
 
 
 class MAD_MT_delete_presets(bpy.types.Menu):

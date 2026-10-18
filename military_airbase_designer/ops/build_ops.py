@@ -4,6 +4,7 @@ from __future__ import annotations
 import bpy
 from bpy.props import StringProperty
 
+from ..core import presets as presetmod
 from ..core import scene_utils as su
 from ..i18n.translations import tr
 from ..layout import builder
@@ -28,7 +29,7 @@ class MAD_OT_create_base(bpy.types.Operator):
 
     def execute(self, context):
         ui = context.scene.mad_ui
-        preset = self.preset or ui.new_base_preset or "RUNWAY_FOCUS"
+        preset = self.preset or ui.new_base_preset or presetmod.DEFAULT_PRESET
         name = self.name or ui.new_base_name or "Airbase"
         root = builder.create_base(context, name, preset, context.scene.cursor.location.copy())
         su.deselect_all()
@@ -92,7 +93,7 @@ class MAD_OT_delete_base(bpy.types.Operator):
         su.remove_object(root)
         for c in cols:
             if c.name.startswith("Airbase_"):
-                su.remove_collection_recursive(c)
+                su.remove_collection_recursive(c)     # unique per base (create_base never shares one)
         return {'FINISHED'}
 
 

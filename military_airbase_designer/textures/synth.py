@@ -40,7 +40,7 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 12                      # bump when the look changes so cached sets regenerate
+VERSION = 13                      # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
@@ -479,7 +479,7 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     lanes = max(1, int(round(tile / 3.8)))
     d_seam = _grid_dist_1d(res, tile, lanes, phase=0.5 * tile / lanes)[:, None]
     seam = np.exp(-(d_seam / 0.05) ** 2).astype(F32)
-    lane_id = (np.floor((_axis_m(res, tile) + 0.0) / (tile / lanes)).astype(np.int64) % lanes)
+    lane_id = (np.floor((_axis_m(res, tile) - 0.5 * tile / lanes) / (tile / lanes)).astype(np.int64) % lanes)   # joints at (k + 0.5) pitch
     lane_tone = (F32(1.0) + F32(0.025) * _signed(N.rng(g.s(5)).random(lanes).astype(F32)))[lane_id][:, None]
     # longitudinal joint cracking: only parts of the cold joints open up (ASTM D5340 "joint reflection")
     seam_crack = np.exp(-(d_seam / 0.006) ** 2).astype(F32) * F32(_ss(0.3, 1.0, a))
@@ -859,13 +859,13 @@ def _decal_skid(cr: int, seed: int, twin: bool = False, start_blob: bool = False
     """Tyre rubber streak along u (u = 0 is the touchdown point)."""
     u, v = _cell_uv(cr)
     wob = (N.fbm(1, cr, 3, seed + 1, octaves=3)[0] - F32(0.5)) * F32(0.05)
-    hw = F32(0.16 if thin else 0.27) * (F32(1.0) + F32(0.3) * (N.fbm(1, cr, 4, seed + 2, octaves=2)[0] - F32(0.5)))
+    hw = F32(0.16 if thin else (0.17 if twin else 0.27)) * (F32(1.0) + F32(0.3) * (N.fbm(1, cr, 4, seed + 2, octaves=2)[0] - F32(0.5)))
 
     def lane(vc: float) -> np.ndarray:
         d = np.abs(v - F32(vc) - wob[None, :]) / hw[None, :]
         return np.exp(-(d * d) * F32(1.4)).astype(F32)
 
-    prof = np.maximum(lane(0.3), lane(0.7)) if twin else lane(0.5)
+    prof = np.maximum(lane(0.31), lane(0.69)) if twin else lane(0.5)
     if start_blob:
         along = _ss(0.0, 0.04, u) * (F32(0.25) + F32(0.75) * np.exp(-np.clip(u - F32(0.08), 0, None) / F32(0.22)))
         along = along * (F32(1.0) - _ss(0.8, 1.0, u))
@@ -938,9 +938,10 @@ def _gen_decals(g: Gen) -> dict:
 
     Cell table: ``core.constants.DECAL_ATLAS``.  Opacity carries the shape; BaseColor / Roughness are the
     deposit itself (rubber albedo ~0.02, slightly glossy; oil darker and glossier; soot matte)."""
-    p, res = g.p, g.res
+    p, res_out = g.p, g.res
     n = C.DECAL_GRID
-    cr = max(32, res // n)
+    cr = max(16, res_out // n)
+    res = n * cr                       # the atlas is generated on a whole number of cells, resampled at the end
     base_seed = g.s(0)
     albedo = np.zeros((res, res, 3), F32)
     rough = np.full((res, res), 0.8, F32)
@@ -972,10 +973,13 @@ def _gen_decals(g: Gen) -> dict:
         opacity[y0:y0 + cr, x0:x0 + cr] = a
         albedo[y0:y0 + cr, x0:x0 + cr] = _grey(var, colour)
         rough[y0:y0 + cr, x0:x0 + cr] = F32(rgh) + F32(0.08) * (var - F32(1.0))
-    if res > n * cr:                                                 # resolution not divisible: pad stays empty
-        pass
-    zeros = np.zeros((res, res), F32)
-    return {"albedo": np.clip(albedo, 0.0, 1.0), "height_mm": zeros, "rough": np.clip(rough, 0.2, 0.95),
+    albedo, rough, opacity = np.clip(albedo, 0.0, 1.0), np.clip(rough, 0.2, 0.95), np.clip(opacity, 0.0, 1.0)
+    if res != res_out:                                               # e.g. 100 px: resample the whole atlas
+        albedo = np.stack([N.resize_bilinear(albedo[..., k], res_out, res_out) for k in range(3)], axis=2)
+        rough = N.resize_bilinear(rough, res_out, res_out)
+        opacity = N.resize_bilinear(opacity, res_out, res_out)
+    zeros = np.zeros((res_out, res_out), F32)
+    return {"albedo": albedo, "height_mm": zeros, "rough": rough,
             "height_range": (0.0, 1.0), "metallic": 0.0, "opacity": opacity, "ao_const": 1.0, "puddles": False,
             "normal_scale": 0.0}
 
@@ -1038,7 +1042,7 @@ def params_key(name: str, settings=None, resolution: int | None = None, params: 
     spec = TEXTURE_SETS[name]
     p = params or read_params(settings, resolution)
     d = {"name": name, "version": VERSION, "resolution": int(p.resolution), "seed": int(p.seed),
-         "engine": p.engine, "normal_directx": bool(p.normal_directx), "tile": spec.tile}
+         "engine": p.engine, "normal_directx": bool(p.normal_directx), "tile": spec.tile, "wet": round(float(p.wet), 4)}
     for k in spec.relevant:
         v = getattr(p, k)
         d[k] = round(float(v), 4) if isinstance(v, float) else (list(v) if isinstance(v, tuple) else v)

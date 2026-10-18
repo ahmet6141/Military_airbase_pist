@@ -57,6 +57,16 @@ def _upd_mat(self, context):
     rebuild.on_param_change(_root_of(self), kind='MATERIAL')
 
 
+def _upd_geo_mat(self, context):
+    """Baked into vertex colours (geometry) AND mirrored by shader inputs (material): rebuild both."""
+    if updates_suspended():
+        return
+    from . import rebuild
+    root = _root_of(self)
+    rebuild.on_param_change(root, kind='GEOMETRY')
+    rebuild.on_param_change(root, kind='MATERIAL')
+
+
 def _upd_light(self, context):
     if updates_suspended():
         return
@@ -230,7 +240,7 @@ class MAD_MarkingSettings(bpy.types.PropertyGroup):
     hold_line_width: EnumProperty(name="Hold line width", items=[('6', "6 in (DoD)", ""), ('12', "12 in (FAA)", "")],
                                   default='6', update=_upd)
     leading_zero: BoolProperty(name="Leading zero (05 vs 5)", default=True, update=_upd)
-    paint_wear: FloatProperty(name="Paint wear", description="Amount of chipping / tyre-rubbed erosion on paint", default=0.35, min=0.0, max=1.0, update=_upd_mat)
+    paint_wear: FloatProperty(name="Paint wear", description="Amount of chipping / tyre-rubbed erosion on paint", default=0.35, min=0.0, max=1.0, update=_upd_geo_mat)
     striated: BoolProperty(name="Striated wide markings", description="Paint wide markings as 6-in stripes (frost-heave practice)", default=False, update=_upd)
 
 
@@ -356,7 +366,7 @@ class MAD_StructureSettings(bpy.types.PropertyGroup):
     wash_rack: BoolProperty(name="Wash rack", default=True, update=_upd)
     navaids: BoolProperty(name="Navaids (ILS, TACAN, radar, weather)", default=True, update=_upd)
     revetments: BoolProperty(name="Revetments on alert apron", default=True, update=_upd)
-    camouflage: BoolProperty(name="Camouflage colours on shelters", default=True, update=_upd_mat)
+    camouflage: BoolProperty(name="Camouflage colours on shelters", default=True, update=_upd)
 
 
 class MAD_PerimeterSettings(bpy.types.PropertyGroup):
@@ -388,15 +398,15 @@ class MAD_TerrainSettings(bpy.types.PropertyGroup):
 class MAD_MaterialSettings(bpy.types.PropertyGroup):
     resolution: EnumProperty(name="Texture resolution", items=RES_ITEMS, default='2048', update=_upd_mat)
     slabs_per_tile: IntProperty(name="Slabs per tile", description="Concrete slabs across one texture tile (1 = best texel density, 2-4 = less repetition)", default=2, min=1, max=4, update=_upd_mat)
-    seed: IntProperty(name="Seed", default=1234, min=0, max=999999, update=_upd_mat)
+    seed: IntProperty(name="Seed", default=1234, min=0, max=999999, update=_upd_geo_mat)
     engine: EnumProperty(name="Engine preset", items=ENGINE_ITEMS, default='UNREAL', update=_upd_mat)
     normal_directx: BoolProperty(name="DirectX normal (Y-)", description="Flip green channel (Unreal); off = OpenGL (Unity/glTF/Blender)", default=True, update=_upd_mat)
     texture_dir: StringProperty(name="Texture folder", subtype='DIR_PATH', default="//textures/", options=_PATH_OPTS, update=_upd_mat)
     generate_textures: BoolProperty(name="Generate image textures", description="Synthesize PNG texture sets (off = flat placeholder materials)", default=True, update=_upd_mat)
     preview_only: BoolProperty(name="Preview-resolution textures", description="Set when a build regenerated texture sets at preview resolution; Generate Textures writes the full resolution", default=False, options={'HIDDEN'})
     age: FloatProperty(name="Pavement age", description="0 = new pavement, 1 = heavily weathered", default=0.55, min=0.0, max=1.0, update=_upd_mat)
-    rubber: FloatProperty(name="Rubber deposits", description="Touchdown-zone rubber build-up", default=0.7, min=0.0, max=1.0, update=_upd_mat)
-    dirt: FloatProperty(name="Edge dirt", default=0.5, min=0.0, max=1.0, update=_upd_mat)
+    rubber: FloatProperty(name="Rubber deposits", description="Touchdown-zone rubber build-up", default=0.7, min=0.0, max=1.0, update=_upd_geo_mat)
+    dirt: FloatProperty(name="Edge dirt", default=0.5, min=0.0, max=1.0, update=_upd_geo_mat)
     concrete_tint: FloatVectorProperty(name="Concrete tint", subtype='COLOR', size=3, default=(1.0, 1.0, 1.0), min=0.0, max=1.0, update=_upd_mat)
     asphalt_tint: FloatVectorProperty(name="Asphalt tint", subtype='COLOR', size=3, default=(1.0, 1.0, 1.0), min=0.0, max=1.0, update=_upd_mat)
     wet: FloatProperty(name="Wetness", default=0.0, min=0.0, max=1.0, update=_upd_mat)
@@ -453,7 +463,7 @@ def _preset_items(self, context):
     except Exception:
         items = []
     if not items:
-        items = [("USAF_CLASS_B_FIGHTER", "USAF Class B fighter base", "")]
+        items = [("RUNWAY_FOCUS", "Runway focus", "")]
     _preset_enum_cache = items
     return _preset_enum_cache
 

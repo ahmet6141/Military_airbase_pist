@@ -45,13 +45,18 @@ class MAD_OT_taxiway_add(bpy.types.Operator):
         s = root.mad
         suspend_updates()
         try:
-            t = s.taxiways.add()
-            t.name = _next_taxiway_name(s.taxiways)
-            t.kind = self.kind
+            # read everything from the existing list BEFORE adding (the new item would otherwise count as a used
+            # name / as the parallel taxiway itself); plain Python values only, adding can reallocate the collection
+            name = _next_taxiway_name(s.taxiways)
             par = next((x for x in s.taxiways if x.kind == 'PARALLEL'), None)
-            t.side = par.side if par else 'LEFT'
+            par_side = par.side if par else 'LEFT'
+            par_offset = par.offset if par else None
+            t = s.taxiways.add()
+            t.name = name
+            t.kind = self.kind
+            t.side = par_side
             if self.kind == 'PARALLEL':
-                t.offset = ft(1037.5) if par is None else par.offset + ft(237.5)
+                t.offset = ft(1037.5) if par_offset is None else par_offset + ft(237.5)
             elif self.kind == 'HIGH_SPEED':
                 t.station = ft(1500)
                 t.exit_dir = 'HIGH'
@@ -77,7 +82,7 @@ class MAD_OT_taxiway_remove(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         root = active_root(context)
-        return root is not None and len(root.mad.taxiways) > 0
+        return root is not None and 0 <= root.mad.taxiway_index < len(root.mad.taxiways)
 
     def execute(self, context):
         root = active_root(context)
@@ -124,7 +129,7 @@ class MAD_OT_taxiway_duplicate(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         root = active_root(context)
-        return root is not None and len(root.mad.taxiways) > 0
+        return root is not None and 0 <= root.mad.taxiway_index < len(root.mad.taxiways)
 
     def execute(self, context):
         root = active_root(context)
@@ -254,7 +259,7 @@ class MAD_OT_apron_duplicate(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         root = active_root(context)
-        return root is not None and len(root.mad.aprons) > 0
+        return root is not None and 0 <= root.mad.apron_index < len(root.mad.aprons)
 
     def execute(self, context):
         root = active_root(context)

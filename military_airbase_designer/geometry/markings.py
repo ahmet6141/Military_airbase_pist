@@ -413,19 +413,36 @@ def build(ctx) -> None:
 
 
 # =========================================================================== runway end markings
+# Threshold stripe totals by runway width: UFC 3-260-04 para 5-2.9.3 / FAA AC 150/5340-1M Table 3-1 (ft) and ICAO
+# Annex 14 Vol I 5.2.4 (m) agree: 4 / 6 / 8 / (10) / 12 / 16 stripes for 60 / 75 / 100 / (125) / 150 / 200 ft
+# (18 / 23 / 30 / 45 / 60 m). Non-standard widths pack the stripes outward until 4 ft (1.2 m) from the edge.
+_UFC_THRESHOLD_STRIPES = ((60, 4), (75, 6), (100, 8), (125, 10), (150, 12), (200, 16))
+_ICAO_THRESHOLD_STRIPES = ((18, 4), (23, 6), (30, 8), (45, 12), (60, 16))
+
+
+def _standard_stripe_total(width_m: float, icao: bool) -> int | None:
+    table = _ICAO_THRESHOLD_STRIPES if icao else tuple((ft(w) / 1.0, n) for w, n in _UFC_THRESHOLD_STRIPES)
+    tol = 0.6 if icao else ft(0.5)
+    for w, n in table:
+        if abs(width_m - w) <= tol:
+            return n
+    return None
+
+
 def _threshold_stripe_edges(half_w: float, icao: bool) -> list[tuple[float, float]]:
     """Lateral [t0, t1] (one side, positive) of the threshold stripes."""
-    out = []
+    out: list[tuple[float, float]] = []
     if icao:
-        sw, pitch = 1.8, 3.6
-        t = 1.8          # centre gap 3.6 m
-        while t + sw <= min(half_w - 3.0, 27.0) and len(out) < 8:
-            out.append((t, t + sw))
-            t += pitch
-        return out
-    sw, pitch = MK.threshold_stripe_w, MK.threshold_pitch
-    t = MK.threshold_center_gap / 2
-    while t + sw <= half_w - MK.threshold_edge_margin and len(out) < MK.threshold_max_stripes // 2:
+        sw, pitch, t = 1.8, 3.6, 1.8          # centre gap 3.6 m
+        margin = 1.2
+    else:
+        sw, pitch = MK.threshold_stripe_w, MK.threshold_pitch
+        t = MK.threshold_center_gap / 2
+        margin = MK.threshold_edge_margin
+    total = _standard_stripe_total(2.0 * half_w, icao)
+    n_max = total // 2 if total is not None else (8 if icao else MK.threshold_max_stripes // 2)
+    limit = half_w + 1e-6 if total is not None else half_w - margin + 1e-6      # standard widths: the table decides
+    while t + sw <= limit and len(out) < n_max:
         out.append((t, t + sw))
         t += pitch
     return out
@@ -969,7 +986,10 @@ def _surface_signs(painter: Painter, h: planmod.HoldLine, tw: planmod.TaxiwayPla
     along_far = -(3.5 * lw_h + MK.sphps_before_hold)      # far edge of the sign box (toward the runway)
 
     def place(text: str, lateral_centre: float, bg: str, fg: str, border: str | None) -> None:
-        pos, hol, width = glyphs.layout_text(text, 'SIGN', height=text_h, align='CENTER')
+        try:
+            pos, hol, width = glyphs.layout_text(text, 'SIGN', height=text_h, align='CENTER')
+        except KeyError:
+            return              # designator with characters outside the sign font (A-Z 0-9 - . / space): skip this sign
         box_w, box_h = width + 2 * margin, text_h + 2 * margin
         a1 = along_far
         a0 = a1 - box_h

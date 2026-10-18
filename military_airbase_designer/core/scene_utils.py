@@ -42,6 +42,15 @@ def ensure_collection(name: str, parent: bpy.types.Collection | None = None) -> 
     return col
 
 
+def new_collection(name: str, parent: bpy.types.Collection | None = None) -> bpy.types.Collection:
+    """Always a NEW collection (Blender appends .001 on a name clash): one per base, so deleting a base never
+    removes another base's objects."""
+    parent = parent or bpy.context.scene.collection
+    col = bpy.data.collections.new(name)
+    parent.children.link(col)
+    return col
+
+
 def _collection_in_other_parent(col: bpy.types.Collection, parent: bpy.types.Collection) -> bool:
     for c in bpy.data.collections:
         if col.name in c.children and c != parent:

@@ -60,6 +60,8 @@ def rebuild_root(root: bpy.types.Object, kinds: set[str] | None = None) -> None:
         builder.update_materials(root)
     else:
         builder.build_base(root)
+        if 'MATERIAL' in kinds:                  # shader input defaults (paint wear, rubber, dirt) changed as well
+            builder.update_materials(root)
 
 
 def is_busy() -> bool:

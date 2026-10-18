@@ -27,13 +27,19 @@ def user_preset_dir() -> str:
     return bpy.utils.user_resource('SCRIPTS', path=os.path.join("presets", "military_airbase_designer"), create=True)
 
 
+DEFAULT_PRESET = "RUNWAY_FOCUS"
+# Workstation preferences (not part of a base design): kept when a preset is applied.
+_WORKSTATION_KEYS = {"materials": {"resolution", "engine", "normal_directx", "texture_dir", "generate_textures"}}
+_WORKSTATION_GROUPS = ("export",)
+
+
 def list_presets() -> list[tuple[str, str, str]]:
-    """[(identifier, label, path)] bundled first, then user presets."""
+    """[(identifier, label, path)] bundled first (default preset at the top), then user presets."""
     out = []
     for d in (PRESET_DIR, user_preset_dir()):
         if not os.path.isdir(d):
             continue
-        for fn in sorted(os.listdir(d)):
+        for fn in sorted(os.listdir(d), key=lambda f: (f[:-5] != DEFAULT_PRESET, f)):
             if fn.lower().endswith(".json"):
                 path = os.path.join(d, fn)
                 try:
@@ -77,15 +83,17 @@ def _reset_group(pg) -> None:
 
 def reset_to_defaults(root: bpy.types.Object, keep_materials: bool = True) -> None:
     s = root.mad
-    for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain", "export") + (() if keep_materials else ("materials",)):
+    for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain") + (() if keep_materials else ("materials",)):
         _reset_group(getattr(s, group))
     s.taxiways.clear()
     s.aprons.clear()
+    s.taxiway_index = 0
+    s.apron_index = 0
 
 
 def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True) -> None:
     """Apply a preset. Presets are deltas on top of the defaults, so everything is reset first
-    (texture folder / engine settings are kept: they are workstation preferences, not base design)."""
+    (export, texture folder, engine and resolution are workstation preferences: kept, never changed by a preset)."""
     data = identifier_or_data if isinstance(identifier_or_data, dict) else load_preset(identifier_or_data)
     s = root.mad
     suspend_updates()
@@ -93,8 +101,9 @@ def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True)
         if reset:
             reset_to_defaults(root, keep_materials=True)
         for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
-            if group in data:
-                _apply_group(getattr(s, group), data[group])
+            if group in data and not (reset and group in _WORKSTATION_GROUPS):
+                skip = _WORKSTATION_KEYS.get(group, ()) if reset else ()
+                _apply_group(getattr(s, group), {k: v for k, v in data[group].items() if k not in skip})
         for key in ("base_name", "icao_code", "quality"):
             if key in data:
                 setattr(s, key, data[key])
@@ -108,6 +117,8 @@ def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True)
             for item in data["aprons"]:
                 a = s.aprons.add()
                 _apply_group(a, item)
+        s.taxiway_index = max(0, min(s.taxiway_index, len(s.taxiways) - 1))
+        s.apron_index = max(0, min(s.apron_index, len(s.aprons) - 1))
         s.preset_name = data.get("label", str(identifier_or_data) if not isinstance(identifier_or_data, dict) else "")
     finally:
         resume_updates()
@@ -141,6 +152,9 @@ def settings_to_dict(root: bpy.types.Object, label: str = "") -> dict:
 
 def save_user_preset(root: bpy.types.Object, name: str) -> str:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name.strip()) or "preset"
+    bundled = {fn[:-5] for fn in os.listdir(PRESET_DIR)} if os.path.isdir(PRESET_DIR) else set()
+    if safe in bundled:
+        safe = "user_" + safe                 # a user preset must never shadow a bundled one (load_preset returns the first match)
     path = os.path.join(user_preset_dir(), safe + ".json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(settings_to_dict(root, name), f, indent=2)

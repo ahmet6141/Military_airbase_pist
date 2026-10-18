@@ -731,7 +731,9 @@ def build_material(spec: library.MaterialSpec, settings=None, existing: bpy.type
     nt = _ensure_tree(mat)
     directory, maps = "", {}
     built = False
-    if spec.texture_set:
+    if spec.texture_set and not bool(_g(settings, "materials.generate_textures", True)):
+        pass                          # "Generate image textures" off = flat placeholder materials, even if files exist
+    elif spec.texture_set:
         try:
             directory, maps = _resolve_maps(spec, settings)
             if _key_map(spec) in maps:
@@ -766,6 +768,8 @@ def material_is_stale(spec: library.MaterialSpec, mat: bpy.types.Material, setti
     if not spec.texture_set:
         return False
     directory, maps = texture_maps(spec.texture_set, settings)
+    if not bool(_g(settings, "materials.generate_textures", True)):
+        maps = {}                       # textures off: the material must be the flat placeholder
     want_textured = _key_map(spec) in maps
     if bool(mat.get("mad_textured", 0)) != want_textured:
         return True
@@ -802,6 +806,8 @@ def refresh_textures(settings=None, force: bool = False, sets=None) -> list[str]
         if sets is not None and spec.texture_set not in sets:
             continue
         _, maps = texture_maps(spec.texture_set, settings)
+        if not bool(_g(settings, "materials.generate_textures", True)):
+            maps = {}
         want_textured = _key_map(spec) in maps
         changed = (force or material_signature(spec, maps) != mat.get("mad_maps", "")
                    or bool(mat.get("mad_textured", 0)) != want_textured

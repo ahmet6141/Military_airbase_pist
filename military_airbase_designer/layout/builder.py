@@ -189,8 +189,10 @@ def sync_textures(s) -> list[str]:
         names = synth.outdated_sets(s, directory)
         if names:
             t0 = time.time()
-            synth.generate_all(s, directory, resolution=synth.preview_resolution(s), force=True, names=names)
-            matnodes.refresh_textures(s, force=True, sets=names)
+            try:
+                synth.generate_all(s, directory, resolution=synth.preview_resolution(s), force=True, names=names)
+            finally:
+                matnodes.refresh_textures(s, force=True, sets=names)      # also after a partial failure: keep state consistent
         try:
             s.materials.preview_only = synth.below_resolution(directory, int(s.materials.resolution))
         except (AttributeError, TypeError, ValueError):
@@ -217,7 +219,7 @@ def create_base(context: bpy.types.Context, name: str = "Airbase", preset: str |
     """Create a new base root Empty with default (or preset) settings and build it."""
     from ..core import presets as presetmod
     scene = context.scene
-    col = su.ensure_collection(f"Airbase_{name}", scene.collection)
+    col = su.new_collection(f"Airbase_{name}", scene.collection)
     root = su.new_empty(f"{C.PREFIX}Base_{name}", col, None, location or (0.0, 0.0, 0.0), 'ARROWS', 50.0)
     root[su.ROOT_PROP] = True
     root[su.TAG_PROP] = False
@@ -225,7 +227,9 @@ def create_base(context: bpy.types.Context, name: str = "Airbase", preset: str |
     root.mad.base_name = name
     suspend_updates()
     try:
-        presetmod.apply_preset(root, preset or "USAF_CLASS_B_FIGHTER")
+        presetmod.apply_preset(root, preset or presetmod.DEFAULT_PRESET)
+        if name and name != "Airbase":
+            root.mad.base_name = name            # the name typed by the user wins over the preset's own
     finally:
         resume_updates()
     build_base(root)
