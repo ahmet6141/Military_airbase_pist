@@ -5,6 +5,7 @@ import time
 
 import bpy
 
+from ..i18n.translations import tr
 from .build_ops import active_root
 
 
@@ -26,7 +27,7 @@ class MAD_OT_generate_textures(bpy.types.Operator):
             from ..textures import synth
             from ..materials import nodes
         except ImportError as exc:
-            self.report({'ERROR'}, f"Texture module not available: {exc}")
+            self.report({'ERROR'}, tr("Texture module not available: {error}").format(error=exc))
             return {'CANCELLED'}
         directory = tio.texture_dir(s)
         res = int(s.materials.resolution)
@@ -40,7 +41,7 @@ class MAD_OT_generate_textures(bpy.types.Operator):
         except Exception as exc:  # report, keep Blender alive
             import traceback
             traceback.print_exc()
-            self.report({'ERROR'}, f"Texture generation failed: {exc}")
+            self.report({'ERROR'}, tr("Texture generation failed: {error}").format(error=exc))
             return {'CANCELLED'}
         finally:
             wm.progress_end()
@@ -50,7 +51,7 @@ class MAD_OT_generate_textures(bpy.types.Operator):
         except Exception:
             from ..materials import library
             library.rebuild_all(s)
-        self.report({'INFO'}, f"{len(names)} texture sets at {res}px written to {directory} in {time.time() - t0:.0f}s")
+        self.report({'INFO'}, tr("{count} texture sets at {res}px written to {directory} in {seconds}s").format(count=len(names), res=res, directory=directory, seconds=f"{time.time() - t0:.0f}"))
         return {'FINISHED'}
 
 

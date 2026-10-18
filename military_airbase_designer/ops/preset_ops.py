@@ -7,6 +7,7 @@ import bpy
 from bpy.props import StringProperty
 
 from ..core import presets as presetmod
+from ..i18n.translations import tr
 from ..layout import builder
 from .build_ops import active_root
 
@@ -28,10 +29,10 @@ class MAD_OT_apply_preset(bpy.types.Operator):
         try:
             presetmod.apply_preset(root, self.identifier)
         except KeyError:
-            self.report({'ERROR'}, f"Preset not found: {self.identifier}")
+            self.report({'ERROR'}, tr("Preset not found: {name}").format(name=self.identifier))
             return {'CANCELLED'}
         builder.build_base(root)
-        self.report({'INFO'}, f"Preset applied: {root.mad.preset_name}")
+        self.report({'INFO'}, tr("Preset applied: {name}").format(name=root.mad.preset_name))
         return {'FINISHED'}
 
 
@@ -55,7 +56,7 @@ class MAD_OT_save_preset(bpy.types.Operator):
     def execute(self, context):
         root = active_root(context)
         path = presetmod.save_user_preset(root, self.name)
-        self.report({'INFO'}, f"Preset saved: {path}")
+        self.report({'INFO'}, tr("Preset saved: {path}").format(path=path))
         return {'FINISHED'}
 
 
@@ -72,9 +73,9 @@ class MAD_OT_delete_user_preset(bpy.types.Operator):
         for ident, _label, path in presetmod.list_presets():
             if ident == self.identifier and os.path.dirname(path) == os.path.normpath(user_dir):
                 os.remove(path)
-                self.report({'INFO'}, f"Deleted preset {ident}")
+                self.report({'INFO'}, tr("Deleted preset {ident}").format(ident=ident))
                 return {'FINISHED'}
-        self.report({'WARNING'}, "Only user presets can be deleted")
+        self.report({'WARNING'}, tr("Only user presets can be deleted"))
         return {'CANCELLED'}
 
 

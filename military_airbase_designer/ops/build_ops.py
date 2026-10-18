@@ -5,6 +5,7 @@ import bpy
 from bpy.props import StringProperty
 
 from ..core import scene_utils as su
+from ..i18n.translations import tr
 from ..layout import builder
 
 
@@ -51,9 +52,9 @@ class MAD_OT_rebuild(bpy.types.Operator):
         ctx = builder.build_base(root)
         su.set_active(root)
         if ctx.warnings:
-            self.report({'WARNING'}, f"Built with {len(ctx.warnings)} warning(s) — see panel")
+            self.report({'WARNING'}, tr("Built with {n} warning(s) — see panel").format(n=len(ctx.warnings)))
         else:
-            self.report({'INFO'}, root.mad.build_stats)
+            self.report({'INFO'}, tr(root.mad.build_stats))
         return {'FINISHED'}
 
 
@@ -70,7 +71,7 @@ class MAD_OT_clear(bpy.types.Operator):
     def execute(self, context):
         root = active_root(context)
         n = su.clear_generated(root)
-        self.report({'INFO'}, f"Removed {n} objects")
+        self.report({'INFO'}, tr("Removed {n} objects").format(n=n))
         return {'FINISHED'}
 
 
