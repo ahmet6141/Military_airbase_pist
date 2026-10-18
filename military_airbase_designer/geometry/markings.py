@@ -188,7 +188,32 @@ class Painter:
             self.add(family, p, **kw)
 
     def add_ring(self, family: str, outer: Sequence[Point], inner: Sequence[Point], **kw) -> None:
-        self.add(family, outer, holes=[inner], **kw)
+        """Closed band between two loops. Built from quads (never as a hole: holes in the union are
+        global and would erase every other marking of the family inside the loop)."""
+        o = g.ensure_ccw(outer)
+        i = g.ensure_ccw(inner)
+        if len(o) == len(i) and len(o) >= 3:
+            n = len(o)
+            # align the two loops (offset loops keep vertex order; guard against a rotated start)
+            best, best_d = 0, float("inf")
+            for k in (0, 1, n - 1):
+                d = g.length(o[0], i[k % n])
+                if d < best_d:
+                    best, best_d = k % n, d
+            for j in range(n):
+                a, b = o[j], o[(j + 1) % n]
+                c, d = i[(best + j + 1) % n], i[(best + j) % n]
+                self.add(family, [a, b, c, d], **kw)
+            return
+        # fallback: resample both loops to the same count
+        m = max(len(o), len(i), 8)
+        oo = g.resample_polyline(o, g.polyline_length(o, True) / m, closed=True)[:m]
+        ii = g.resample_polyline(i, g.polyline_length(i, True) / m, closed=True)[:m]
+        if len(oo) == len(ii):
+            for j in range(len(oo)):
+                self.add(family, [oo[j], oo[(j + 1) % len(oo)], ii[(j + 1) % len(ii)], ii[j]], **kw)
+        else:
+            self.add(family, outer, holes=[inner], **kw)
 
     def build(self, z_fn: Callable[[float, float, str], float], wear_fn: Callable[[float, float, str], float]) -> None:
         for fam, (mat_name, z_off, suffix) in FAMILIES.items():
