@@ -25,6 +25,16 @@ Tek tıkla gerçek standartlara (UFC 3-260-01, UFC 3-260-04, UFC 3-535-01, FAA A
 | **Dokular** | 14 adet döşenebilir PBR seti (BaseColor / Normal / Roughness / AO / Height 16-bit + motor paketi ORM / MaskMap / MetallicSmoothness / MetallicRoughness), numpy ile tamamen prosedürel, 512–8K; plaka derzleri, enine oluklar, çatlaklar, yağ lekeleri, biçilmiş çim şeritleri, zincir örgü çit maskesi |
 | **Dışa aktarma** | FBX / glTF / OBJ; Unreal / Unity / Godot eksen ve ölçek ön ayarları; örnekleri kategori bazında birleştirme; `_LOD0..2` zincirleri; `UCX_` çarpışma mesh'leri; dokuların kopyalanması; `material_index.json` + içe aktarma kılavuzu |
 
+### Ekran görüntüleri
+
+Varsayılan *Runway focus* ön ayarı, Cycles ile üretilmiş 2K dokularla (eklentinin kendi sentezleyicisi, dış kaynak yok):
+
+| | |
+|---|---|
+| ![Pilot gözü: eşik, tanıtım rakamları, overrun ve bekleme çizgisi](docs/images/pilot_eye.jpg) | ![Havadan: pist, paralel taksi yolu, bağlantılar ve apron](docs/images/aerial.jpg) |
+| ![Bekleme noktası: A/B deseni, geliştirilmiş merkez hattı, yüzey tabelaları, RGL](docs/images/hold_position.jpg) | ![Gece: HIRL, eşik/son ışıkları, PAPI, taksi yolu kenar ışıkları](docs/images/night.jpg) |
+| ![Teker koyma bölgesi: lastik izi çıkartmaları ve TDZ işaretleri](docs/images/tdz_pilot.jpg) | ![L-880 PAPI kutusu: mercek başlıkları, kırılgan ayaklar, nişan borusu](docs/images/papi.jpg) |
+
 ### Kurulum
 
 1. `python3 tools/build_extension.py` ile `dist/military_airbase_designer-1.0.0.zip` üretin (veya depodan hazır zip'i indirin).
@@ -85,6 +95,16 @@ ICAO Annex 14 / NATO STANAG 3158) with one click:
 * **Structures (optional)** — NATO 3rd-generation HAS (three styles, camouflage), revetments, hangars, control tower, fire station, ops buildings, fuel farm, munitions igloos, BAK-12 arresting system, jet blast deflectors, hush house, ECP, guard towers, navaids, double perimeter fence and patrol road.
 * **Textures** — 14 seamless procedural PBR sets (BaseColor / Normal / Roughness / AO / 16-bit Height + ORM / MaskMap / MetallicSmoothness / MetallicRoughness packing), 512–8K, pure numpy.
 * **Export** — FBX / glTF / OBJ with Unreal / Unity / Godot presets, instance joining, `_LOD` chains, `UCX_` collision, texture copying and a `material_index.json` recipe.
+
+### Screenshots
+
+Default *Runway focus* preset rendered in Cycles with the add-on's own 2K synthesized textures (no external assets):
+
+| | |
+|---|---|
+| ![Pilot's eye: threshold, designators, overrun and hold line](docs/images/pilot_eye.jpg) | ![Aerial: runway, parallel taxiway, connectors and apron](docs/images/aerial.jpg) |
+| ![Hold position: pattern A/B, enhanced centreline, surface signs, guard lights](docs/images/hold_position.jpg) | ![Night: HIRL, threshold/end lights, PAPI, taxiway edge lights](docs/images/night.jpg) |
+| ![Touchdown zone: skid-mark decals and TDZ markings](docs/images/tdz_pilot.jpg) | ![L-880 PAPI unit: lens hoods, frangible legs, sight tube](docs/images/papi.jpg) |
 
 ### Install
 
