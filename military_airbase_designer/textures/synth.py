@@ -459,12 +459,13 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     crack_amt = _ss(0.1, 0.8, a)
     if a > 0.05:
         cr_res = min(g.sub_res(2), 2048)
-        cr = N.cracks(cr_res, cr_res, g.period(1.6 if kind != "shoulder" else 0.9, cr_res), g.s(6), threshold=0.06,
-                      width=1.0, octaves=4, cell_edges=0.7 if kind == "shoulder" else 0.4, coverage=0.15 + 0.7 * a)
-        seal_lo = N.blur(cr, max(1, int(round(0.03 * cr_res / tile))))
-        seal_lo = _ss(0.06, 0.25, N.normalize01(seal_lo) if seal_lo.max() > 0 else seal_lo)
+        # sparse crack network: real airfield asphalt shows a few sealed cracks per 10 m, not a dense web
+        cr = N.cracks(cr_res, cr_res, g.period(3.2 if kind != "shoulder" else 1.6, cr_res), g.s(6), threshold=0.06,
+                      width=0.8, octaves=4, cell_edges=0.5 if kind == "shoulder" else 0.25, coverage=0.05 + 0.4 * a)
+        seal_lo = N.blur(cr, max(1, int(round(0.018 * cr_res / tile))))
+        seal_lo = _ss(0.08, 0.3, N.normalize01(seal_lo) if seal_lo.max() > 0 else seal_lo)
         crack = g.up(cr) * F32(crack_amt)
-        seal = g.up(seal_lo) * _ss(0.35, 0.6, g.fbm(1.2, 3, 7, div=4)) * F32(crack_amt)
+        seal = g.up(seal_lo) * _ss(0.45, 0.7, g.fbm(1.2, 3, 7, div=4)) * F32(crack_amt)
         del cr, seal_lo
     else:
         crack = np.zeros((res, res), F32)
@@ -512,7 +513,7 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     albedo = _mul(albedo, (F32(1.0) + F32(0.06) * _signed(macro)) * (F32(1.0) + F32(0.05) * _signed(mottle)) * lane_tone * patch_tone)
     albedo = _mul(albedo, F32(1.0) - F32(0.08) * seam)
     albedo = _mul(albedo, F32(1.0) - F32(0.4) * crack)
-    albedo = _mix(albedo, _lin("#1A1A1A"), np.clip(seal + patch_edge, 0, 1) * F32(0.85))
+    albedo = _mix(albedo, _lin("#1E1E1D"), np.clip(seal + patch_edge, 0, 1) * F32(0.6))
     albedo = _mul(albedo, F32(1.0) - F32(0.55) * rub)
     if kind == "shoulder":
         albedo = _mix(albedo, _lin("#A99E8C"), dust * F32(0.5))

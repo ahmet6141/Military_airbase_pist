@@ -459,6 +459,31 @@ def _build_textured(mat, nt, spec, settings, directory: str, maps: dict[str, str
     else:
         base = tex_nodes.get(library.MAP_BASECOLOR)
         color_src = base.outputs["Color"] if base is not None else None
+        if base is not None and 'terrain' in spec.tags:
+            # anti-tiling for large ground areas: a second, rotated/scaled sample blended by a ~60 m noise
+            map2 = _node(nt, "ShaderNodeMapping", "MAD_DetileMapping", _X_UV + 200, -1200, f_tex, "Detile sample (x0.31, 41 deg)")
+            map2.vector_type = 'POINT'
+            map2.inputs["Rotation"].default_value = (0.0, 0.0, 0.715)
+            map2.inputs["Scale"].default_value = (0.31, 0.31, 1.0)
+            nt.links.new(uv.outputs["UV"], map2.inputs["Vector"])
+            tex2 = _image_node(nt, "MAD_BaseColor_Detile", images[library.MAP_BASECOLOR], _X_TEX, -1200, f_tex, map2.outputs["Vector"], "BaseColor (detile)")
+            noise = _node(nt, "ShaderNodeTexNoise", "MAD_DetileNoise", _X_TEX, -1500, f_tex, "Blend noise (~60 m)")
+            noise.noise_dimensions = '2D'
+            _set_input(noise, "Scale", 0.13)       # UV units are texture tiles (8 m): 0.13 -> ~60 m period
+            _set_input(noise, "Detail", 2.0)
+            _set_input(noise, "Roughness", 0.5)
+            nt.links.new(uv.outputs["UV"], noise.inputs["Vector"])
+            rng = _node(nt, "ShaderNodeMapRange", "MAD_DetileRange", _X_TEX + 200, -1500, f_tex, "0.35..0.65 -> 0..1")
+            _set_input(rng, "From Min", 0.35)
+            _set_input(rng, "From Max", 0.65)
+            nt.links.new(noise.outputs["Fac"], rng.inputs["Value"])
+            dmix = _node(nt, "ShaderNodeMix", "MAD_DetileMix", _X_PROC - 200, 250, f_wear, "Detile blend")
+            dmix.data_type = 'RGBA'
+            dmix.blend_type = 'MIX'
+            nt.links.new(rng.outputs["Result"], NG.mix_socket(dmix, "Factor_Float"))
+            nt.links.new(base.outputs["Color"], NG.mix_socket(dmix, "A_Color"))
+            nt.links.new(tex2.outputs["Color"], NG.mix_socket(dmix, "B_Color"))
+            color_src = NG.mix_result(dmix, "Result_Color")
         tint = _node(nt, "ShaderNodeMix", "MAD_Tint", _X_PROC, 250, f_wear, "Tint (spec colour / user tint)")
         tint.data_type = 'RGBA'
         tint.blend_type = 'MULTIPLY'
