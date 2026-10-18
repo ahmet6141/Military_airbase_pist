@@ -40,14 +40,14 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 4                       # bump when the look changes so cached sets regenerate
+VERSION = 5                       # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
 
 __all__ = [
     "TextureSetSpec", "TEXTURE_SETS", "Params", "read_params", "params_key", "generate_set", "generate_all",
-    "preview_resolution", "tile_metres", "expected_maps", "sidecar_path", "VERSION",
+    "preview_resolution", "tile_metres", "expected_maps", "sidecar_path", "outdated_sets", "VERSION",
 ]
 
 
@@ -848,13 +848,13 @@ def _decal_skid(cr: int, seed: int, twin: bool = False, start_blob: bool = False
     """Tyre rubber streak along u (u = 0 is the touchdown point)."""
     u, v = _cell_uv(cr)
     wob = (N.fbm(1, cr, 3, seed + 1, octaves=3)[0] - F32(0.5)) * F32(0.05)
-    hw = F32(0.07 if thin else 0.12) * (F32(1.0) + F32(0.35) * (N.fbm(1, cr, 4, seed + 2, octaves=2)[0] - F32(0.5)))
+    hw = F32(0.16 if thin else 0.27) * (F32(1.0) + F32(0.3) * (N.fbm(1, cr, 4, seed + 2, octaves=2)[0] - F32(0.5)))
 
     def lane(vc: float) -> np.ndarray:
         d = np.abs(v - F32(vc) - wob[None, :]) / hw[None, :]
         return np.exp(-(d * d) * F32(1.4)).astype(F32)
 
-    prof = np.maximum(lane(0.36), lane(0.64)) if twin else lane(0.5)
+    prof = np.maximum(lane(0.3), lane(0.7)) if twin else lane(0.5)
     if start_blob:
         along = _ss(0.0, 0.04, u) * (F32(0.25) + F32(0.75) * np.exp(-np.clip(u - F32(0.08), 0, None) / F32(0.22)))
         along = along * (F32(1.0) - _ss(0.8, 1.0, u))
@@ -862,9 +862,10 @@ def _decal_skid(cr: int, seed: int, twin: bool = False, start_blob: bool = False
         along = np.sin(np.pi * u).astype(F32) ** F32(0.7)
     else:
         along = _ss(0.0, 0.05, u) * (F32(1.0) - F32(0.5) * u) * (F32(1.0) - _ss(0.82, 1.0, u))
-    tread = F32(0.5) + F32(0.5) * N.anisotropic_fbm(cr, cr, 2, 28, seed + 3, octaves=3)      # streaky along u
-    breakup = F32(0.7) + F32(0.3) * N.fbm(cr, cr, 6, seed + 4, octaves=3)
-    return np.clip(prof * along * tread * breakup, 0.0, 1.0).astype(F32)
+    tread = F32(0.65) + F32(0.35) * N.anisotropic_fbm(cr, cr, 2, 28, seed + 3, octaves=3)    # streaky along u
+    breakup = F32(0.8) + F32(0.2) * N.fbm(cr, cr, 6, seed + 4, octaves=3)
+    a = prof * along * tread * breakup
+    return np.clip(a / max(float(a.max()), 1e-3), 0.0, 1.0).astype(F32)
 
 
 def _decal_stain(cr: int, seed: int, radius: float = 0.3, irregular: float = 0.3, soft: float = 0.12,
@@ -907,8 +908,9 @@ def _decal_exhaust(cr: int, seed: int) -> np.ndarray:
     half = F32(0.07) + F32(0.3) * u
     core = np.exp(-((v - F32(0.5)) / half) ** 2 * F32(1.6))
     along = _ss(0.0, 0.05, u) * (F32(1.0) - F32(0.85) * _ss(0.3, 1.0, u))
-    wisps = F32(0.55) + F32(0.45) * N.anisotropic_fbm(cr, cr, 3, 12, seed, octaves=4)
-    return np.clip(core * along * wisps, 0.0, 1.0).astype(F32)
+    wisps = F32(0.6) + F32(0.4) * N.anisotropic_fbm(cr, cr, 3, 12, seed, octaves=4)
+    a = core * along * wisps
+    return np.clip(a / max(float(a.max()), 1e-3), 0.0, 1.0).astype(F32)
 
 
 def _decal_rust(cr: int, seed: int) -> np.ndarray:
@@ -947,7 +949,7 @@ def _gen_decals(g: Gen) -> dict:
         "drip_cluster": (lambda s: _decal_drips(cr, s, 9), oil, 0.35),
         "fuel_spill": (lambda s: _decal_stain(cr, s, radius=0.38, irregular=0.35, soft=0.45, strength=0.55), _lin("#2A2622"), 0.5),
         "exhaust": (lambda s: _decal_exhaust(cr, s), soot, 0.75),
-        "scuff_arc": (lambda s: _decal_skid(cr, s, fade_both=True, thin=True) * F32(0.7), rubber, 0.6),
+        "scuff_arc": (lambda s: _decal_skid(cr, s, fade_both=True, thin=True) * F32(0.8), rubber, 0.6),
         "grime": (lambda s: _decal_stain(cr, s, radius=0.36, irregular=0.4, soft=0.5, strength=0.45), grime, 0.85),
         "rust_streak": (lambda s: _decal_rust(cr, s), rust, 0.8),
     }
@@ -1030,6 +1032,31 @@ def params_key(name: str, settings=None, resolution: int | None = None, params: 
         v = getattr(p, k)
         d[k] = round(float(v), 4) if isinstance(v, float) else (list(v) if isinstance(v, tuple) else v)
     return json.dumps(d, sort_keys=True, separators=(",", ":"))
+
+
+def outdated_sets(settings=None, directory: str | None = None, names=None) -> list[str]:
+    """Sets whose files are missing or whose manifest entry was written with other parameters or an
+    older synthesiser version.  The resolution is *not* compared: a higher-resolution set written by
+    "Generate Textures" stays valid for a build at preview resolution."""
+    directory = directory or texio.texture_dir(settings)
+    p = read_params(settings)
+    manifest = texio.read_manifest(directory)
+    out: list[str] = []
+    for name in (list(names) if names else list(TEXTURE_SETS.keys())):
+        entry = manifest.get(name)
+        try:
+            stored = json.loads(entry.get("key", "{}")) if entry else {}
+        except (ValueError, AttributeError):
+            stored = {}
+        wanted = json.loads(params_key(name, params=p))
+        stored_res = stored.pop("resolution", 0)
+        wanted.pop("resolution", None)
+        if not stored or stored != wanted or int(stored_res or 0) < 1:
+            out.append(name)
+            continue
+        if not all(os.path.exists(texio.map_path(directory, name, m)) for m in expected_maps(name, params=p)):
+            out.append(name)
+    return out
 
 
 def sidecar_path(directory: str, name: str) -> str:

@@ -115,6 +115,7 @@ def build_base(root: bpy.types.Object, modules: Sequence[str] | None = None) -> 
         for cat in su.CATEGORIES:
             cols[cat] = su.ensure_collection(f"{root.name}_{cat}", root_col)
         su.clear_generated(root)
+        sync_textures(s)
         ensure_root_transform(root)
         mats = MaterialGetter(s)
         ctx = BuildContext(plan=plan, root=root, settings=s, collections=cols, mats=mats, quality=s.quality)
@@ -168,10 +169,41 @@ def _root_collection(root: bpy.types.Object) -> bpy.types.Collection:
     return col
 
 
+def sync_textures(s) -> list[str]:
+    """Regenerate texture sets whose manifest is outdated (synthesiser version, seed, age / rubber /
+    dirt / wet, engine, tints) at preview resolution, reload their images and rebuild the materials
+    that use them. Returns the regenerated set names. No-op when image textures are disabled."""
+    try:
+        if not s.materials.generate_textures:
+            return []
+    except AttributeError:
+        return []
+    try:
+        from ..materials import nodes as matnodes
+        from ..textures import io as tio
+        from ..textures import synth
+    except Exception:  # noqa: BLE001 - optional modules
+        return []
+    try:
+        directory = tio.texture_dir(s)
+        names = synth.outdated_sets(s, directory)
+        if not names:
+            return []
+        t0 = time.time()
+        synth.generate_all(s, directory, resolution=synth.preview_resolution(s), force=True, names=names)
+        matnodes.refresh_textures(s, force=True, sets=names)
+        print(f"MAD materials: regenerated {len(names)} outdated texture set(s) in {time.time() - t0:.1f}s -> {directory}")
+        return names
+    except Exception:  # noqa: BLE001 - textures must never break a build
+        traceback.print_exc()
+        return []
+
+
 def update_materials(root: bpy.types.Object) -> None:
     """Material-only refresh (textures / weathering / night mode)."""
     from ..materials import library
     s = root.mad
+    sync_textures(s)
     library.rebuild_all(s)
 
 

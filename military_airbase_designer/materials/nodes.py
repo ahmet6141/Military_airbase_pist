@@ -706,6 +706,7 @@ def build_material(spec: library.MaterialSpec, settings=None, existing: bpy.type
             traceback.print_exc()
             nt.nodes.clear()
             built = False
+    mat["mad_texdir"] = directory if built else ""
     if not built:
         try:
             _build_flat(mat, nt, spec, settings, spec.texture_set if spec.texture_set else None)
@@ -722,10 +723,26 @@ def build_material(spec: library.MaterialSpec, settings=None, existing: bpy.type
     return mat
 
 
-def refresh_textures(settings=None, force: bool = False) -> list[str]:
+def material_is_stale(spec: library.MaterialSpec, mat: bpy.types.Material, settings=None) -> bool:
+    """True when ``mat`` no longer matches the texture folder / map files / node code it should use."""
+    if mat.get("mad_node_version") != NODE_VERSION:
+        return True
+    if not spec.texture_set:
+        return False
+    directory, maps = texture_maps(spec.texture_set, settings)
+    want_textured = _key_map(spec) in maps
+    if bool(mat.get("mad_textured", 0)) != want_textured:
+        return True
+    if material_signature(spec, maps) != mat.get("mad_maps", ""):
+        return True
+    return bool(want_textured and os.path.normpath(mat.get("mad_texdir", "") or "") != os.path.normpath(directory))
+
+
+def refresh_textures(settings=None, force: bool = False, sets=None) -> list[str]:
     """Reload every image of the texture folder and rebuild the materials whose files changed.
 
-    Called by the UI after "Generate Textures". Returns the spec names that were rebuilt.
+    Called by the UI after "Generate Textures" and by the builder after regenerating outdated sets
+    (``sets`` limits the rebuild to materials using those texture sets). Returns the rebuilt spec names.
     """
     _GEN_ATTEMPTED.clear()
     io = _io()
@@ -746,6 +763,8 @@ def refresh_textures(settings=None, force: bool = False) -> list[str]:
             continue
         if mat.name != library.material_name(spec.name):
             continue          # '.001' duplicates are left alone
+        if sets is not None and spec.texture_set not in sets:
+            continue
         _, maps = texture_maps(spec.texture_set, settings)
         want_textured = _key_map(spec) in maps
         changed = (force or material_signature(spec, maps) != mat.get("mad_maps", "")

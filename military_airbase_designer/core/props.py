@@ -239,7 +239,7 @@ class MAD_DecalSettings(bpy.types.PropertyGroup):
     seed: IntProperty(name="Decal seed", default=7, min=0, max=99999, update=_upd)
     skids: BoolProperty(name="Touchdown skid marks", default=True, update=_upd)
     skid_count: IntProperty(name="Skid marks", description="Touchdown marks per runway (both ends together)", default=90, min=0, max=600, update=_upd)
-    skid_strength: FloatProperty(name="Skid opacity", default=0.75, min=0.0, max=1.0, update=_upd)
+    skid_strength: FloatProperty(name="Skid opacity", default=0.85, min=0.0, max=1.0, update=_upd)
     aircraft_mix: EnumProperty(name="Traffic mix", description="Main-gear tracks and mark sizes of the landing traffic",
                                items=[('FIGHTER', "Fighters / trainers", "F-16 / F-15 / F-35 / T-38 class tracks"),
                                       ('MIXED', "Mixed", "Fighters plus tactical and strategic airlift"),

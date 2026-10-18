@@ -141,9 +141,9 @@ def get_material(name: str, settings=None, rebuild: bool = False) -> bpy.types.M
     spec = SPECS[name]
     mname = material_name(name)
     mat = bpy.data.materials.get(mname)
-    if mat is not None and not rebuild:
-        return mat
     from . import nodes
+    if mat is not None and not rebuild and not nodes.material_is_stale(spec, mat, settings):
+        return mat
     return nodes.build_material(spec, settings, existing=mat)
 
 

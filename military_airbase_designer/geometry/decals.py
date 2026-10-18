@@ -154,7 +154,7 @@ def _tdz_skids(sheet: DecalSheet, rw: planmod.RunwayPlan, d, rng: random.Random,
             yaw = math.radians(rng.gauss(0.0, 0.7))
             length = rng.uniform(l0, l1)
             peak = math.exp(-((dist - d.touchdown_mean) / max(d.touchdown_spread * 1.4, 1.0)) ** 2)
-            alpha = rng.uniform(0.3, 1.0) * d.skid_strength * (0.55 + 0.45 * peak)
+            alpha = rng.uniform(0.45, 1.0) * d.skid_strength * (0.6 + 0.4 * peak)
             cell = "skid_twin" if twin else ("touch_blob" if rng.random() < 0.3 else "skid")
             direction = (sgn * math.cos(yaw), math.sin(yaw))
             x0 = thr + sgn * dist
@@ -173,7 +173,7 @@ def _tdz_skids(sheet: DecalSheet, rw: planmod.RunwayPlan, d, rng: random.Random,
                         y = lateral + side * track * 0.5
                         if abs(y) <= half_w:
                             sheet.streak((thr + sgn * start, y), direction, length2, width * 0.9, "skid_fade",
-                                         alpha * rng.uniform(0.2, 0.4))
+                                         alpha * rng.uniform(0.3, 0.5))
 
 
 def _turn_scuffs(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) -> None:
@@ -199,7 +199,7 @@ def _turn_scuffs(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) -
             length = radius * sweep
             curve = side * sgn * sweep                    # turn toward the taxiway side
             width = rng.uniform(0.25, 0.4)
-            alpha = rng.uniform(0.2, 0.5) * d.skid_strength
+            alpha = rng.uniform(0.3, 0.6) * d.skid_strength
             sheet.streak((start_x, lateral), (sgn, 0.0), length, width, "scuff_arc", alpha, curve=curve, segments=10)
 
 
@@ -253,12 +253,12 @@ def _exhaust(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) -> No
                 for off in (-7.0, 7.0):
                     start = _at(sp, -22.0, off)
                     sheet.strip([start, (start[0] + back[0] * 26.0, start[1] + back[1] * 26.0)], 4.0, "exhaust",
-                                rng.uniform(0.2, 0.4) * k, taper=(0.5, 1.6))
+                                rng.uniform(0.35, 0.6) * k, taper=(0.5, 1.6))
             else:
                 start = _at(sp, rng.uniform(-14.0, -11.0), rng.gauss(0.0, 0.3))
                 length = rng.uniform(9.0, 16.0)
                 sheet.strip([start, (start[0] + back[0] * length, start[1] + back[1] * length)], rng.uniform(2.2, 3.2),
-                            "exhaust", rng.uniform(0.3, 0.55) * k, taper=(0.45, 1.5))
+                            "exhaust", rng.uniform(0.45, 0.75) * k, taper=(0.45, 1.5))
 
 
 # =========================================================================== entry point
