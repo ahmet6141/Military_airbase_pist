@@ -363,7 +363,7 @@ def build(ctx) -> None:
     # ------------------------------------------------------------------ roads
     if ms.road_markings:
         for road in plan.roads:
-            _road(painter, road)
+            _road(painter, road, [o for o in plan.roads if o is not road])
 
     # ------------------------------------------------------------------ meshes
     footprint = None
@@ -1122,26 +1122,54 @@ def _compass(painter: Painter, info: dict) -> None:
 
 
 # =========================================================================== roads
-def _road(painter: Painter, road: planmod.RoadPlan) -> None:
+def _dist_point_segment(p: Point, a: Point, b: Point) -> float:
+    abx, aby = b[0] - a[0], b[1] - a[1]
+    l2 = abx * abx + aby * aby
+    t = 0.0 if l2 < 1e-12 else max(0.0, min(1.0, ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / l2))
+    return math.hypot(p[0] - (a[0] + t * abx), p[1] - (a[1] + t * aby))
+
+
+def _road(painter: Painter, road: planmod.RoadPlan, others: Sequence[planmod.RoadPlan] = ()) -> None:
+    """Edge lines and lane dashes of one road; they stop where another road crosses (intersections are unpainted)."""
     w = road.width
     ew = MK.road_edge_w
     cl = list(road.centerline)
-    if road.closed:
-        for sg in (1.0, -1.0):
-            off = g.offset_polyline(cl, sg * (w / 2 - ew / 2), closed=True)
-            outer, inner = g.polyline_strip(off, ew, closed=True)
-            painter.add_ring("RoadWhite", outer, inner, zone='ROAD', kind="road_edge")
-    else:
-        for sg in (1.0, -1.0):
-            off = g.offset_polyline(cl, sg * (w / 2 - ew / 2))
-            if len(off) >= 2:
+    cross = []
+    for o in others:
+        pts = list(o.centerline) + ([o.centerline[0]] if o.closed and o.centerline else [])
+        if len(pts) >= 2:
+            cross.append((o.width / 2.0 + ew, pts))
+
+    def free(p: Point) -> bool:
+        for hw, pts in cross:
+            for i in range(len(pts) - 1):
+                if _dist_point_segment(p, pts[i], pts[i + 1]) < hw:
+                    return False
+        return True
+
+    for sg in (1.0, -1.0):
+        off = g.offset_polyline(cl, sg * (w / 2 - ew / 2), closed=road.closed)
+        if len(off) < 2:
+            continue
+        line = list(off) + ([off[0]] if road.closed else [])
+        if not cross:
+            if road.closed:
+                outer, inner = g.polyline_strip(off, ew, closed=True)
+                painter.add_ring("RoadWhite", outer, inner, zone='ROAD', kind="road_edge")
+            else:
                 painter.add("RoadWhite", g.polyline_strip(off, ew), 'ROAD', False, kind="road_edge")
-        if w > 6.0:
-            total = g.polyline_length(cl)
-            for a, b in _dashes(0.0, total, MK.road_lane_dash, MK.road_lane_gap):
-                pa, _ = g.point_along(cl, a)
-                pb, _ = g.point_along(cl, b)
-                painter.add("RoadWhite", g.strip(pa, pb, ew), 'ROAD', False, kind="road_lane")
+            continue
+        for run in _runs(_split_polyline(line, 1.0), free):
+            if len(run) >= 2:
+                painter.add("RoadWhite", g.polyline_strip(run, ew), 'ROAD', False, kind="road_edge")
+    if not road.closed and w > 6.0:
+        total = g.polyline_length(cl)
+        for a, b in _dashes(0.0, total, MK.road_lane_dash, MK.road_lane_gap):
+            pa, _ = g.point_along(cl, a)
+            pb, _ = g.point_along(cl, b)
+            if cross and not (free(pa) and free(pb) and free(g.lerp(pa, pb, 0.5))):
+                continue
+            painter.add("RoadWhite", g.strip(pa, pb, ew), 'ROAD', False, kind="road_lane")
     for pos, d in road.stop_bars:
         n = g.perp_left(d)
         a = (pos[0] - n[0] * w / 2, pos[1] - n[1] * w / 2)

@@ -86,6 +86,17 @@ Flat meshes 4 mm above pavement (`MARKING_Z = 0.004`), one object per colour fam
 Black borders: offset polygons (`offset_loop`) 6 in around white/yellow markings on concrete,
 built as a separate object 1 mm lower.
 
+### 3.3a Layering and overlap rules (Cycles self-shadowing)
+
+Two coplanar layers make Cycles shade the overlap black (each surface occludes the other's shadow ray), so the
+build never emits coincident geometry: roads are triangulated in one union (closed roads as rings of quads),
+paint colour families sit at distinct sub-millimetre heights (white 0, red +0.3 mm, yellow +0.5 mm, orange +1 mm,
+text over a painted background +1 mm, black borders -1 mm) and the decal sheet floats 3 mm above all of them.
+Wide runway markings are densified to 2 m edges before triangulation so they follow the crown.
+
+The terrain ground boundary is made of the offset pavement loops themselves (`terrain._direct_ground_loops`),
+not of the band outline, which can degenerate at sub-metre notches.
+
 ### 3.3b `geometry.decals`
 
 One alpha-blended mesh `MAD_Decals` of thin strips at `DECAL_Z` (5.5 mm, above the paint) mapped onto
