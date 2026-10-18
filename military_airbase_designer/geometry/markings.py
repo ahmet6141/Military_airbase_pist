@@ -38,6 +38,9 @@ FAMILIES = {
 }
 BORDERED_FAMILIES = ("centerline", "threshold", "designator", "aiming", "tdz", "hold", "taxi_cl", "sphps", "lead_in")
 TEXT_LIFT = 0.001    # text painted over a painted background sits 1 mm higher (coplanar paint z-fights)
+DENSIFY_STEP = 2.0   # max edge length of crowned (runway / shoulder) paint polygons: a flat chord across a 1.5 %
+                     # crown sags 4 mm per 5 m span, so wide markings (threshold bar, aiming point) would sink into
+                     # the pavement; 2 m edges keep the sag under 1 mm
 MAX_SEG = 1.0        # arc segmentation for curved paint (m)
 SEG_STEP = 0.5       # polyline sub-segment length for interruption tests (m)
 
@@ -152,6 +155,22 @@ def _polyline_paint(points: Sequence[Point], width: float, closed: bool = False)
 
 
 # =========================================================================== painter
+def _densify(poly: Sequence[Point], step: float) -> list[Point]:
+    """Insert points along edges longer than ``step`` (corners kept)."""
+    out: list[Point] = []
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        out.append(a)
+        length = g.length(a, b)
+        k = int(length // step)
+        for j in range(1, k + 1):
+            t = j * step / length
+            if t < 0.999:
+                out.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+    return out
+
+
 class Painter:
     """Collects polygons per colour family and builds one mesh per family."""
 
@@ -221,9 +240,11 @@ class Painter:
 
     def build(self, z_fn: Callable[[float, float, str], float], wear_fn: Callable[[float, float, str], float]) -> None:
         for fam, (mat_name, z_off, suffix) in FAMILIES.items():
-            polys = self.pos[fam]
-            if not polys:
+            if not self.pos[fam]:
                 continue
+            # crowned zones: split long edges so the paint follows the pavement surface
+            polys = [(_densify(p, DENSIFY_STEP) if zz in ('RUNWAY', 'SHOULDER') else p)
+                     for p, zz in zip(self.pos[fam], self.zone[fam])]
             pts, tris, origins = g.union_triangulate(polys, holes=self.holes[fam])
             if not tris:
                 continue
