@@ -822,7 +822,8 @@ def write_readme(out_dir: str, export_settings, mat_settings, base_file: str, n_
         f"Material recipe ({engine}): BaseColor (sRGB) -> Base Color; Normal (linear, {'DirectX' if directx else 'OpenGL'}) -> Normal;",
         f"        {packed or 'Roughness / AO / Metallic'} -> {channels}; Height (16-bit) -> displacement/parallax (optional);",
         "        vertex colour 'Wear': R rubber deposits, G edge dirt, B macro variation, A paint wear (markings alpha mask).",
-        "        Pavement/terrain UVs are world-planar (tile size in material_index.json); paint materials use alpha mask (MASKED/dithered).",
+        "        Pavement/terrain UVs are world-planar (tile size in material_index.json); paint materials use alpha mask (MASKED/dithered);",
+        "        the MAD_Decals sheet is alpha-BLENDED (Opacity x vertex alpha), no shadow casting, UVs index the 4x4 T_MAD_Decals atlas.",
     ]
     path = os.path.join(out_dir, README_FILE)
     with open(path, "w", encoding="utf-8") as f:

@@ -15,7 +15,7 @@ engine-oriented export.
   `compass_to_math(heading)`), so children never need to know the heading.
 * Object names: `MAD_<Category>_<Name>` (MAD = Military Airbase Designer). Mesh datablocks:
   `MAD_…`. Materials `M_MAD_<Name>`; textures `T_MAD_<Name>_<Map>.png`.
-* Collections: `Airbase_<name>` root with children `Pavement, Markings, Lighting, Signage,
+* Collections: `Airbase_<name>` root with children `Pavement, Markings, Decals, Lighting, Signage,
   Structures, Perimeter, Navaids, Terrain` (see `scene_utils.CATEGORIES`).
 * Every generated object gets custom props `mad_generated=True`, `mad_category=<cat>`; the root
   Empty gets `mad_base_root=True` and holds the parameters (`object.mad` PropertyGroup).
@@ -28,6 +28,7 @@ engine-oriented export.
 |---|---|
 | `runway` | length, width, heading, suffix (L/C/R, count of parallel runways), surface (PCC/ASPHALT/HYBRID), slab size, crown %, shoulder width/type, overrun length/width per end, blast pad, displaced threshold per end, arresting gear stations, class (A/B), rubber/wear amount, grooving |
 | `markings` | standard (UFC/FAA/ICAO), toggles for every marking family, line width choices (6/12 in), black borders (auto), paint wear, striated option |
+| `decals` | enabled, traffic mix (fighter/mixed/heavy), skid count / opacity, landing share per end, touchdown distance and spread, lateral spread, turn scuffs, apron stains, exhaust soot, stain opacity, seed |
 | `taxiways` | CollectionProperty of `MAD_TaxiwayItem`: kind (PARALLEL, CONNECTOR, HIGH_SPEED, END_LOOP, APRON_LINK, CUSTOM), designator, width, side, position (station along runway), angle, fillet radius, hold line type/distance, lights |
 | `aprons` | CollectionProperty of `MAD_ApronItem`: kind (MAIN, ALERT, HOT_CARGO, ARM_DEARM, HANGAR, HELIPAD, COMPASS_PAD), station, side, size, spot count / aircraft class, lead-in radius |
 | `lighting` | HIRL/MIRL, threshold/end, centreline, TDZ, PAPI (side, distance), approach system per end (NONE/ALSF2/ALSF1/MALSR/SSALR), REIL, taxiway edge/centreline, guard lights, floodlights, beacon, night mode & emission strength |
@@ -50,7 +51,7 @@ Update callbacks call `core.rebuild.request_rebuild(root)` which debounces throu
 props  ──►  layout.plan.build_plan(settings) ──► Plan (pure data, base frame)
                                                    │
         ┌──────────────┬──────────────┬────────────┼──────────────┬─────────────┬──────────┐
-   geometry.pavement  geometry.markings  geometry.lighting  geometry.signage  geometry.structures  geometry.terrain
+   geometry.pavement  geometry.markings  geometry.decals  geometry.lighting  geometry.signage  geometry.structures  geometry.terrain
         │ (MeshBuilder → meshes → objects in collections, materials from materials.library)
    materials.library.get(name) ─► node materials referencing textures from textures.synth (generated lazily, cached on disk)
    ops.export ─► FBX/glTF/OBJ + texture copy + material index JSON
@@ -85,6 +86,15 @@ Flat meshes 4 mm above pavement (`MARKING_Z = 0.004`), one object per colour fam
 Black borders: offset polygons (`offset_loop`) 6 in around white/yellow markings on concrete,
 built as a separate object 1 mm lower.
 
+### 3.3b `geometry.decals`
+
+One alpha-blended mesh `MAD_Decals` of thin strips at `DECAL_Z` (5.5 mm, above the paint) mapped onto
+cells of the `T_MAD_Decals` atlas (`constants.DECAL_ATLAS`, 4 x 4). `DecalSheet.strip()` builds a
+polyline strip with u along / v across the cell; the per-decal opacity goes into the vertex alpha and
+the material multiplies it with the atlas opacity. Placement is stochastic (seeded): touchdown marks
+sampled from a Gaussian around `touchdown_mean` on both main-gear tracks of a weighted traffic mix,
+braking streaks, turn-scuff arcs at exits, drips / grime / soot at apron spots.
+
 ### 3.4 Instanced props
 Light fixtures, signs, fence posts, tie-downs, bollards, approach masts: one mesh datablock per
 type (`materials`-assigned), many linked-duplicate objects (`scene_utils.instance`). Optional
@@ -107,7 +117,7 @@ type (`materials`-assigned), many linked-duplicate objects (`scene_utils.instanc
 
 ## 5. UI (`ui/panels.py`)
 N-panel tab **Airbase**: main panel with preset menu, "Build Full Base", "Rebuild", "Clear",
-live-update toggle, warnings box; sub-panels (DEFAULT_CLOSED): Runway, Markings, Taxiways
+live-update toggle, warnings box; sub-panels (DEFAULT_CLOSED): Runway, Markings, Decals & Wear, Taxiways
 (UIList), Aprons (UIList), Lighting, Signage, Structures, Perimeter & Terrain, Materials &
 Textures, Export. Labels/tooltips English with Turkish translation dictionary in `i18n/`.
 
