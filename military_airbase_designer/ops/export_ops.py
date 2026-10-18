@@ -758,9 +758,11 @@ def write_material_index(out_dir: str, items: Sequence[ExportItem], mat_settings
                 "specular": spec.specular, "alpha": spec.alpha, "two_sided": spec.two_sided,
                 "emission": spec.emission, "emission_strength": spec.emission_strength,
                 "texture_set": spec.texture_set, "tile_m": spec.tile if spec.texture_set else None,
-                "uv": "world-planar, metres / tile_m baked into UV0" if spec.texture_set else "flat colour",
-                "vertex_color_channel": spec.wear_channel,
-                "vertex_color_usage": VERTEX_COLOR_USAGE.get(spec.wear_channel) if spec.wear_channel else None,
+                "uv": ("atlas cells (4x4 T_MAD_Decals, see constants.DECAL_ATLAS) in UV0" if 'decal' in spec.tags
+                       else "world-planar, metres / tile_m baked into UV0" if spec.texture_set else "flat colour"),
+                "vertex_color_channel": 'A' if 'decal' in spec.tags else spec.wear_channel,
+                "vertex_color_usage": ("per-decal opacity multiplier (Opacity x vertex alpha)" if 'decal' in spec.tags
+                                       else VERTEX_COLOR_USAGE.get(spec.wear_channel) if spec.wear_channel else None),
                 "normal_strength": spec.normal_strength, "tags": list(spec.tags),
                 "maps": _maps_of_set(spec.texture_set, spec, tex_dir, packed, tex_out) if spec.texture_set else {},
             })
