@@ -235,4 +235,4 @@ DECAL_ATLAS = {
     "grime":       (2, 2),   # soft grime patch
     "rust_streak": (3, 2),   # water / rust run-off streak
 }
-DECAL_Z = MARKING_Z + 0.0015   # decals float above paint: rubber and soot cover markings
+DECAL_Z = MARKING_Z + 0.0030   # decals float above all paint families: rubber and soot cover markings

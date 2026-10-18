@@ -40,7 +40,7 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 10                      # bump when the look changes so cached sets regenerate
+VERSION = 12                      # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
@@ -496,9 +496,9 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     if a > 0.05:
         cr_res = min(g.sub_res(2), 2048)
         if kind == "shoulder":
-            # old narrow shoulder strips: aggregate-rich, nearly uniform, with a hairline transverse thermal crack
-            # every few metres (contour-type crack networks read as marble veins and tile visibly)
-            cr = _wavy_lines(g, 2, 15, 'y', 0.0025, 0.06, 0.45, res=cr_res) * F32(_ss(0.2, 0.6, a))
+            # old narrow shoulder strips: aggregate-rich and nearly uniform. No line cracks: the world-planar texture
+            # has no relation to the strip direction, so a straight crack reads as a dashed line along a N-S shoulder
+            cr = np.zeros((cr_res, cr_res), F32)
         else:
             # sealed cracks are long thin lines: a transverse thermal crack and a wandering longitudinal one per tile
             # (blobby contour cracks repeat as an obvious motif on an 6 m tile)
@@ -661,7 +661,9 @@ def _gen_paint_wear(g: Gen) -> dict:
     edges = g.worley(0.04, 1, feature="f2-f1")
     crack = g.cracks(0.3, 2, div=2, threshold=0.04, width=1.5, octaves=4, cell_edges=0.6, coverage=0.8)
     pits = _ss(0.22, 0.08, g.worley(0.006, 3))
-    field = zones * F32(0.6) + _ss(0.5, 0.05, edges) * F32(0.4) + pits * F32(0.35) + crack * F32(0.2)   # chips / worn zones, few spidery cracks
+    # worn zones + isolated pin-prick chips; the Voronoi cell borders / cracks only as faint hints (a strong
+    # crackle reads as dried mud on a wide white stripe)
+    field = zones * F32(0.62) + _ss(0.5, 0.05, edges) * F32(0.12) + pits * F32(0.4) + crack * F32(0.06)
     field += g.fbm(0.04, 3, 4) * F32(0.15)
     worn_frac = 0.3 * a
     thr = _quantile_threshold(field, worn_frac)

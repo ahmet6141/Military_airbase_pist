@@ -29,10 +29,12 @@ Poly = g.Poly
 CATEGORY = "Markings"
 FAMILIES = {
     # family -> (material spec, z offset, object suffix)
+    # Different colour families that overlap (white border under orange stripes, yellow chevron over a white edge line)
+    # get distinct sub-millimetre heights: coplanar duplicates make Cycles self-shadow the overlap (speckled black).
     "White": ("PaintWhite", C.MARKING_Z, "White"),
-    "Yellow": ("PaintYellow", C.MARKING_Z, "Yellow"),
-    "Red": ("PaintRed", C.MARKING_Z, "Red"),
-    "Orange": ("PaintOrange", C.MARKING_Z, "Orange"),
+    "Yellow": ("PaintYellow", C.MARKING_Z + 0.0005, "Yellow"),
+    "Red": ("PaintRed", C.MARKING_Z + 0.0003, "Red"),
+    "Orange": ("PaintOrange", C.MARKING_Z + 0.001, "Orange"),
     "Black": ("PaintBlack", C.BORDER_Z, "Black"),
     "RoadWhite": ("RoadPaintWhite", C.MARKING_Z, "RoadWhite"),
 }

@@ -803,18 +803,28 @@ def _build_roads(ctx) -> None:
         for a, b, c in tris:
             mb.add_face_idx((base + a, base + b, base + c), 0, False, colors=[cols[a], cols[b], cols[c]])
 
-    open_polys: list[Poly] = []
+    # ONE union for every road: two coincident layers (a service road crossing the perimeter road) make Cycles
+    # self-shadow the overlap black. Closed roads are rings of quads (a union "hole" would be global and erase the
+    # open roads that cross the ring's interior).
+    polys: list[Poly] = []
+    legacy: list[tuple[Poly, Poly]] = []
     for r in roads:
         cl = g.resample_polyline(r.centerline, step, closed=r.closed)
         if r.closed and len(cl) >= 3:
             outer, inner = g.polyline_strip(cl, r.width, closed=True)
-            pts, tris, _ = g.union_triangulate([outer], holes=[inner])
-            if tris:
-                add_soup(pts, tris)
+            if len(outer) == len(inner) and len(outer) >= 3:
+                n = len(outer)
+                polys.extend(g.ensure_ccw([outer[i], outer[(i + 1) % n], inner[(i + 1) % n], inner[i]]) for i in range(n))
+            else:
+                legacy.append((outer, inner))
         elif len(cl) >= 2:
-            open_polys.append(g.polyline_strip(cl, r.width))
-    if open_polys:
-        pts, tris, _ = g.union_triangulate(open_polys)
+            polys.append(g.polyline_strip(cl, r.width))
+    if polys:
+        pts, tris, _ = g.union_triangulate(polys)
+        if tris:
+            add_soup(pts, tris)
+    for outer, inner in legacy:
+        pts, tris, _ = g.union_triangulate([outer], holes=[inner])
         if tris:
             add_soup(pts, tris)
     if mb.is_empty():
