@@ -187,16 +187,16 @@ def sync_textures(s) -> list[str]:
     try:
         directory = tio.texture_dir(s)
         names = synth.outdated_sets(s, directory)
-        if not names:
-            return []
-        t0 = time.time()
-        res = synth.preview_resolution(s)
-        synth.generate_all(s, directory, resolution=res, force=True, names=names)
-        matnodes.refresh_textures(s, force=True, sets=names)
+        if names:
+            t0 = time.time()
+            synth.generate_all(s, directory, resolution=synth.preview_resolution(s), force=True, names=names)
+            matnodes.refresh_textures(s, force=True, sets=names)
         try:
-            s.materials.preview_only = res < int(s.materials.resolution)
+            s.materials.preview_only = synth.below_resolution(directory, int(s.materials.resolution))
         except (AttributeError, TypeError, ValueError):
             pass
+        if not names:
+            return []
         print(f"MAD materials: regenerated {len(names)} outdated texture set(s) in {time.time() - t0:.1f}s -> {directory}")
         return names
     except Exception:  # noqa: BLE001 - textures must never break a build

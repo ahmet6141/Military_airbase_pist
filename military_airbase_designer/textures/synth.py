@@ -47,7 +47,7 @@ MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Op
 
 __all__ = [
     "TextureSetSpec", "TEXTURE_SETS", "Params", "read_params", "params_key", "generate_set", "generate_all",
-    "preview_resolution", "tile_metres", "expected_maps", "sidecar_path", "outdated_sets", "VERSION",
+    "preview_resolution", "tile_metres", "expected_maps", "sidecar_path", "outdated_sets", "below_resolution", "VERSION",
 ]
 
 
@@ -1057,6 +1057,22 @@ def outdated_sets(settings=None, directory: str | None = None, names=None) -> li
         if not all(os.path.exists(texio.map_path(directory, name, m)) for m in expected_maps(name, params=p)):
             out.append(name)
     return out
+
+
+def below_resolution(directory: str, resolution: int, names=None) -> bool:
+    """True when any (present) set in ``directory`` was written below ``resolution`` px."""
+    manifest = texio.read_manifest(directory)
+    for name in (list(names) if names else list(TEXTURE_SETS.keys())):
+        entry = manifest.get(name)
+        if not entry:
+            continue
+        try:
+            stored = int(json.loads(entry.get("key", "{}")).get("resolution", 0))
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if 0 < stored < int(resolution):
+            return True
+    return False
 
 
 def sidecar_path(directory: str, name: str) -> str:
