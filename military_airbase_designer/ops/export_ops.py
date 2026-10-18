@@ -79,7 +79,7 @@ README_FILE = "README_export.txt"
 LOD_CATEGORIES = {"Structures", "Perimeter", "Navaids", "Signage", "Lighting"}
 LOD_MIN_TRIS = 2000
 LOD_RATIOS = (0.5, 0.25, 0.1)                 # LOD1, LOD2, LOD3
-BAKE_CATEGORIES = {"Pavement", "Markings", "Terrain"}   # baked to world space, pivot = world origin
+BAKE_CATEGORIES = {"Pavement", "Markings", "Decals", "Terrain"}   # baked to world space, pivot = world origin
 COLLISION_DECIMATE = {"Pavement", "Terrain"}
 COLLISION_BOX = {"Structures"}
 COLLISION_DECIMATE_RATIO = 0.2
