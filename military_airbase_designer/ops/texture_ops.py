@@ -46,6 +46,7 @@ class MAD_OT_generate_textures(bpy.types.Operator):
         finally:
             wm.progress_end()
         s.materials.generate_textures = True
+        s.materials.preview_only = False
         try:
             nodes.refresh_textures(s, force=True)
         except Exception:

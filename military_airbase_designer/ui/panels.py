@@ -474,6 +474,8 @@ class MAD_PT_materials(_SubPanel, bpy.types.Panel):
         row = col.row(align=True)
         row.operator("mad.generate_textures", icon='TEXTURE')
         row.operator("mad.open_texture_folder", text="", icon='FILE_FOLDER')
+        if m.generate_textures and m.preview_only:
+            layout.label(text="Textures are at preview resolution - press Generate Textures", icon='INFO')
         layout.separator()
         col = layout.column(align=True)
         col.prop(m, "engine")

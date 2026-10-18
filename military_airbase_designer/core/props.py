@@ -238,7 +238,7 @@ class MAD_DecalSettings(bpy.types.PropertyGroup):
     enabled: BoolProperty(name="Decals", description="Tyre rubber skid marks, turn scuffs, oil stains and exhaust soot (alpha-blended decal sheet)", default=True, update=_upd)
     seed: IntProperty(name="Decal seed", default=7, min=0, max=99999, update=_upd)
     skids: BoolProperty(name="Touchdown skid marks", default=True, update=_upd)
-    skid_count: IntProperty(name="Skid marks", description="Touchdown marks per runway (both ends together)", default=90, min=0, max=600, update=_upd)
+    skid_count: IntProperty(name="Skid marks", description="Touchdown marks per runway (both ends together)", default=180, min=0, max=1000, update=_upd)
     skid_strength: FloatProperty(name="Skid opacity", default=0.85, min=0.0, max=1.0, update=_upd)
     aircraft_mix: EnumProperty(name="Traffic mix", description="Main-gear tracks and mark sizes of the landing traffic",
                                items=[('FIGHTER', "Fighters / trainers", "F-16 / F-15 / F-35 / T-38 class tracks"),
@@ -248,7 +248,7 @@ class MAD_DecalSettings(bpy.types.PropertyGroup):
     traffic_split: FloatProperty(name="Landings on low end", description="Share of landings toward the low-numbered threshold (prevailing wind)", default=0.6, min=0.0, max=1.0, update=_upd)
     touchdown_mean: FloatProperty(name="Touchdown distance", description="Mean touchdown point beyond the threshold", default=ft(1250), min=50.0, max=1500.0, unit='LENGTH', update=_upd)
     touchdown_spread: FloatProperty(name="Touchdown spread", description="Standard deviation of the touchdown point", default=ft(400), min=10.0, max=800.0, unit='LENGTH', update=_upd)
-    lateral_spread: FloatProperty(name="Lateral spread", description="Standard deviation of the aircraft centreline offset", default=3.0, min=0.0, max=15.0, unit='LENGTH', update=_upd)
+    lateral_spread: FloatProperty(name="Lateral spread", description="Standard deviation of the aircraft centreline offset", default=3.5, min=0.0, max=15.0, unit='LENGTH', update=_upd)
     turn_scuffs: BoolProperty(name="Turn scuffs at exits", default=True, update=_upd)
     apron_stains: BoolProperty(name="Apron oil stains", default=True, update=_upd)
     exhaust_stains: BoolProperty(name="Exhaust soot behind spots", default=True, update=_upd)
@@ -393,6 +393,7 @@ class MAD_MaterialSettings(bpy.types.PropertyGroup):
     normal_directx: BoolProperty(name="DirectX normal (Y-)", description="Flip green channel (Unreal); off = OpenGL (Unity/glTF/Blender)", default=True, update=_upd_mat)
     texture_dir: StringProperty(name="Texture folder", subtype='DIR_PATH', default="//textures/", options=_PATH_OPTS, update=_upd_mat)
     generate_textures: BoolProperty(name="Generate image textures", description="Synthesize PNG texture sets (off = flat placeholder materials)", default=True, update=_upd_mat)
+    preview_only: BoolProperty(name="Preview-resolution textures", description="Set when a build regenerated texture sets at preview resolution; Generate Textures writes the full resolution", default=False, options={'HIDDEN'})
     age: FloatProperty(name="Pavement age", description="0 = new pavement, 1 = heavily weathered", default=0.55, min=0.0, max=1.0, update=_upd_mat)
     rubber: FloatProperty(name="Rubber deposits", description="Touchdown-zone rubber build-up", default=0.7, min=0.0, max=1.0, update=_upd_mat)
     dirt: FloatProperty(name="Edge dirt", default=0.5, min=0.0, max=1.0, update=_upd_mat)

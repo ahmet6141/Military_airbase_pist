@@ -529,6 +529,8 @@ TRANSLATIONS = {
 # --------------------------------------------------------------------------- UI / list / preset / texture operators (added with the sidebar UI)
 _EXTRA = {
     ("*", "Decals & Wear"): "Çıkartmalar ve Aşınma",
+    ("*", "Textures are at preview resolution - press Generate Textures"): "Dokular önizleme çözünürlüğünde - Dokuları Üret'e basın",
+    ("*", "Preview-resolution textures"): "Önizleme çözünürlüklü dokular",
     ("*", "Decals"): "Çıkartmalar",
     ("*", "Tyre rubber skid marks, turn scuffs, oil stains and exhaust soot (alpha-blended decal sheet)"): "Lastik izleri, dönüş sürtme izleri, yağ lekeleri ve egzoz isi (alfa karışımlı çıkartma tabakası)",
     ("*", "Decal seed"): "Çıkartma tohumu",

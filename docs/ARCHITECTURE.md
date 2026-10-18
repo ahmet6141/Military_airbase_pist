@@ -115,6 +115,16 @@ type (`materials`-assigned), many linked-duplicate objects (`scene_utils.instanc
   Principled BSDF; vertex colour `Wear` drives rubber darkening / dirt / macro variation;
   markings use BaseColor RGB + alpha wear mask (masked/dithered).
 
+### 4.1 Texture / material sync
+
+Every build (and every material-only refresh) calls `builder.sync_textures`: texture sets whose
+manifest entry is missing or was written by another synthesiser `VERSION` or with other material
+parameters (seed, age, rubber, dirt, wet, engine, normal convention, tints) are regenerated at preview
+resolution (<= 512 px) and their materials rebuilt; `materials.preview_only` then shows a hint until
+**Generate Textures** writes the chosen resolution (a higher-resolution set is never considered
+outdated by resolution alone). `library.get_material` rebuilds a material whenever it is stale: the
+texture folder, the set of map files on disk, the textured/flat state or the node code version changed.
+
 ## 5. UI (`ui/panels.py`)
 N-panel tab **Airbase**: main panel with preset menu, "Build Full Base", "Rebuild", "Clear",
 live-update toggle, warnings box; sub-panels (DEFAULT_CLOSED): Runway, Markings, Decals & Wear, Taxiways

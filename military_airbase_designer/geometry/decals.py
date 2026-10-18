@@ -154,7 +154,7 @@ def _tdz_skids(sheet: DecalSheet, rw: planmod.RunwayPlan, d, rng: random.Random,
             yaw = math.radians(rng.gauss(0.0, 0.7))
             length = rng.uniform(l0, l1)
             peak = math.exp(-((dist - d.touchdown_mean) / max(d.touchdown_spread * 1.4, 1.0)) ** 2)
-            alpha = rng.uniform(0.45, 1.0) * d.skid_strength * (0.6 + 0.4 * peak)
+            alpha = rng.uniform(0.35, 0.9) * d.skid_strength * (0.6 + 0.4 * peak)
             cell = "skid_twin" if twin else ("touch_blob" if rng.random() < 0.3 else "skid")
             direction = (sgn * math.cos(yaw), math.sin(yaw))
             x0 = thr + sgn * dist
@@ -162,7 +162,7 @@ def _tdz_skids(sheet: DecalSheet, rw: planmod.RunwayPlan, d, rng: random.Random,
                 y = lateral + side * track * 0.5
                 if abs(y) > half_w:
                     continue
-                w = width * rng.uniform(0.85, 1.25)
+                w = width * rng.uniform(1.0, 1.5)
                 sheet.streak((x0, y), direction, length, w, cell, alpha)
             # braking / rollout streak further down (a share of landings)
             if rng.random() < 0.18:
