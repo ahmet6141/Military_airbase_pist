@@ -418,12 +418,30 @@ class MAD_BaseSettings(bpy.types.PropertyGroup):
     build_stats: StringProperty(name="Stats", default="")
 
 
+_preset_enum_cache: list = []
+
+
+def _preset_items(self, context):
+    """Dynamic enum of bundled + user presets (strings cached so Blender keeps them alive)."""
+    global _preset_enum_cache
+    try:
+        from . import presets as presetmod
+        items = [(ident, label, path) for ident, label, path in presetmod.list_presets()]
+    except Exception:
+        items = []
+    if not items:
+        items = [("USAF_CLASS_B_FIGHTER", "USAF Class B fighter base", "")]
+    _preset_enum_cache = items
+    return _preset_enum_cache
+
+
 class MAD_UISettings(bpy.types.PropertyGroup):
     """Scene-level UI state (``Scene.mad_ui``)."""
     live_update: BoolProperty(name="Live update", description="Rebuild automatically when a parameter changes", default=False)
     show_advanced: BoolProperty(name="Show advanced", default=False)
     imperial: BoolProperty(name="Show feet", description="Display lengths in feet in labels", default=False)
-    new_base_preset: StringProperty(name="Preset", default="USAF_CLASS_B_FIGHTER")
+    new_base_preset: EnumProperty(name="Preset", description="Preset used by Build Full Base", items=_preset_items)
+    new_base_name: StringProperty(name="Base name", default="Airbase")
 
 
 CLASSES = (

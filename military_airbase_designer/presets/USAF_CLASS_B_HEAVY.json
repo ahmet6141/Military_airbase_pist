@@ -1,0 +1,188 @@
+{
+  "label": "USAF Class B tanker/airlift base (12,000 x 200 ft, KC-135 / C-17)",
+  "base_name": "Airbase",
+  "icao_code": "KXXX",
+  "runway": {
+    "length": 3657.6,
+    "width": 60.96,
+    "heading": 90.0,
+    "runway_class": "B",
+    "surface": "PCC",
+    "slab_size": 6.096,
+    "crown_percent": 1.5,
+    "shoulder_width": 7.62,
+    "shoulder_type": "PAVED",
+    "overrun_type": "PAVED",
+    "overrun_length": 304.8,
+    "arresting_type": "NONE",
+    "arresting_distance": 457.2,
+    "ils_low": true,
+    "ils_high": true,
+    "elevation": 304.8
+  },
+  "markings": {
+    "standard": "UFC",
+    "leading_zero": true,
+    "taxi_line_width": "6",
+    "hold_line_width": "6"
+  },
+  "taxiways": [
+    {
+      "name": "A",
+      "kind": "PARALLEL",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": 0.0,
+      "offset": 316.23
+    },
+    {
+      "name": "A1",
+      "kind": "END",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": -1.0
+    },
+    {
+      "name": "A2",
+      "kind": "CONNECTOR",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": -1219.2
+    },
+    {
+      "name": "A3",
+      "kind": "HIGH_SPEED",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": -609.6,
+      "angle": 30.0,
+      "exit_dir": "LOW"
+    },
+    {
+      "name": "A4",
+      "kind": "CONNECTOR",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": 0.0
+    },
+    {
+      "name": "A5",
+      "kind": "HIGH_SPEED",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": 609.6,
+      "angle": 30.0,
+      "exit_dir": "HIGH"
+    },
+    {
+      "name": "A6",
+      "kind": "CONNECTOR",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": 1219.2
+    },
+    {
+      "name": "A7",
+      "kind": "END",
+      "side": "LEFT",
+      "width": 22.86,
+      "shoulder_width": 7.62,
+      "fillet_radius": 38.1,
+      "station": 1.0
+    }
+  ],
+  "aprons": [
+    {
+      "name": "Main Apron",
+      "kind": "MAIN",
+      "side": "LEFT",
+      "station": 0.0,
+      "length": 731.52,
+      "depth": 335.28,
+      "aircraft": "HEAVY",
+      "rows": 1,
+      "spots": 0
+    },
+    {
+      "name": "Hangar Line",
+      "kind": "HANGAR_LINE",
+      "side": "LEFT",
+      "station": -1100.0,
+      "length": 274.32,
+      "depth": 121.92,
+      "aircraft": "HEAVY",
+      "rows": 1
+    },
+    {
+      "name": "Hot Cargo Pad",
+      "kind": "HOT_CARGO",
+      "side": "LEFT",
+      "station": 1700.0,
+      "length": 121.92,
+      "depth": 121.92,
+      "aircraft": "HEAVY",
+      "spots": 1
+    },
+    {
+      "name": "Fuel Hydrant Apron",
+      "kind": "MAIN",
+      "side": "LEFT",
+      "station": 1000.0,
+      "length": 365.76,
+      "depth": 213.36,
+      "aircraft": "HEAVY",
+      "rows": 1
+    }
+  ],
+  "lighting": {
+    "edge": "HIRL",
+    "als_low": "ALSF2",
+    "als_high": "ALSF2",
+    "papi": true,
+    "papi_side": "LEFT"
+  },
+  "signage": {
+    "sign_size": 3
+  },
+  "structures": {
+    "has_style": "NATO3",
+    "has_layout": "ROW",
+    "hangars": 1,
+    "control_tower": true,
+    "tower_height": 32.0,
+    "fuel_farm": true,
+    "fuel_tanks": 8,
+    "munitions": true,
+    "igloos": 6,
+    "large_hangar": true
+  },
+  "perimeter": {
+    "fence": true,
+    "double_fence": true,
+    "patrol_road": true,
+    "entry_control_point": true,
+    "guard_towers": true
+  },
+  "terrain": {
+    "ditches": true,
+    "mowing_stripes": true
+  },
+  "materials": {
+    "resolution": "2048",
+    "engine": "UNREAL"
+  }
+}

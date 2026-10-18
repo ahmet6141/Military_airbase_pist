@@ -22,12 +22,14 @@ class MAD_OT_create_base(bpy.types.Operator):
     bl_description = "Create a new airbase from the selected preset at the 3D cursor"
     bl_options = {'REGISTER', 'UNDO'}
 
-    preset: StringProperty(name="Preset", default="USAF_CLASS_B_FIGHTER")
-    name: StringProperty(name="Name", default="Airbase")
+    preset: StringProperty(name="Preset", default="")
+    name: StringProperty(name="Name", default="")
 
     def execute(self, context):
-        preset = self.preset or context.scene.mad_ui.new_base_preset or "USAF_CLASS_B_FIGHTER"
-        root = builder.create_base(context, self.name, preset, context.scene.cursor.location.copy())
+        ui = context.scene.mad_ui
+        preset = self.preset or ui.new_base_preset or "RUNWAY_FOCUS"
+        name = self.name or ui.new_base_name or "Airbase"
+        root = builder.create_base(context, name, preset, context.scene.cursor.location.copy())
         su.deselect_all()
         su.set_active(root)
         self.report({'INFO'}, root.mad.build_stats)

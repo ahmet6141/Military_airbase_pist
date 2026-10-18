@@ -1,0 +1,59 @@
+{
+  "label": "Minimal: runway, markings and lights only",
+  "base_name": "Airbase",
+  "icao_code": "XXXX",
+  "runway": {
+    "length": 3048.0,
+    "width": 45.72,
+    "heading": 50.0,
+    "runway_class": "B",
+    "surface": "PCC",
+    "slab_size": 6.096,
+    "crown_percent": 1.5,
+    "shoulder_width": 7.62,
+    "shoulder_type": "PAVED",
+    "overrun_type": "PAVED",
+    "overrun_length": 304.8,
+    "arresting_type": "BAK12",
+    "arresting_distance": 457.2,
+    "ils_low": true,
+    "ils_high": false,
+    "elevation": 304.8
+  },
+  "markings": {
+    "standard": "UFC",
+    "leading_zero": true,
+    "taxi_line_width": "6",
+    "hold_line_width": "6"
+  },
+  "taxiways": [],
+  "aprons": [],
+  "lighting": {
+    "edge": "HIRL",
+    "als_low": "ALSF2",
+    "als_high": "MALSR",
+    "papi": true,
+    "papi_side": "LEFT"
+  },
+  "signage": {
+    "enabled": true,
+    "hold_signs": false,
+    "location_signs": false,
+    "direction_signs": false
+  },
+  "structures": {
+    "enabled": false
+  },
+  "perimeter": {
+    "enabled": false
+  },
+  "terrain": {
+    "enabled": true,
+    "ditches": true,
+    "mowing_stripes": true
+  },
+  "materials": {
+    "resolution": "2048",
+    "engine": "UNREAL"
+  }
+}
