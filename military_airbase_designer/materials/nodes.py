@@ -337,26 +337,34 @@ def _apply_material_settings(mat: bpy.types.Material, spec: library.MaterialSpec
         except (AttributeError, TypeError):
             pass
     masked = spec.alpha == 'MASKED'
+    blend = spec.alpha == 'BLEND'
     if hasattr(mat, "surface_render_method"):
         try:
-            mat.surface_render_method = 'DITHERED'
+            mat.surface_render_method = 'BLENDED' if blend else 'DITHERED'
         except (AttributeError, TypeError):
             pass
     if hasattr(mat, "blend_method"):
         try:
-            mat.blend_method = 'HASHED' if masked else 'OPAQUE'
+            mat.blend_method = 'BLEND' if blend else ('HASHED' if masked else 'OPAQUE')
         except (AttributeError, TypeError, RuntimeError):
             pass
     if hasattr(mat, "shadow_method"):
         try:
-            mat.shadow_method = 'HASHED' if masked else 'OPAQUE'
+            mat.shadow_method = 'NONE' if blend else ('HASHED' if masked else 'OPAQUE')
         except (AttributeError, TypeError, RuntimeError):
             pass
     if hasattr(mat, "use_transparent_shadow"):
         try:
-            mat.use_transparent_shadow = masked
+            mat.use_transparent_shadow = masked or blend
         except (AttributeError, TypeError):
             pass
+    if blend:
+        for attr in ("show_transparent_back", "use_transparency_overlap"):
+            if hasattr(mat, attr):
+                try:
+                    setattr(mat, attr, False)
+                except (AttributeError, TypeError):
+                    pass
     if hasattr(mat, "displacement_method"):
         try:
             mat.displacement_method = 'BUMP'
@@ -416,6 +424,9 @@ def _build_textured(mat, nt, spec, settings, directory: str, maps: dict[str, str
     if key not in images:
         nt.nodes.clear()
         return False
+    if 'decal' in spec.tags:
+        _build_decal(mat, nt, spec, settings, images, maps, uv, bsdf, out, f_tex, f_wear)
+        return True
 
     y = 250
     tex_nodes: dict[str, bpy.types.Node] = {}
@@ -484,6 +495,44 @@ def _build_textured(mat, nt, spec, settings, directory: str, maps: dict[str, str
             nt.links.new(base.outputs["Color"], NG.mix_socket(dmix, "A_Color"))
             nt.links.new(tex2.outputs["Color"], NG.mix_socket(dmix, "B_Color"))
             color_src = NG.mix_result(dmix, "Result_Color")
+            # large-scale, non-repeating variation: dry straw patches (~150-300 m) and a soft brightness drift
+            mnoise = _node(nt, "ShaderNodeTexNoise", "MAD_MacroNoise", _X_TEX, -1800, f_tex, "Macro patches (~200 m)")
+            mnoise.noise_dimensions = '2D'
+            _set_input(mnoise, "Scale", 0.035)
+            _set_input(mnoise, "Detail", 4.0)
+            _set_input(mnoise, "Roughness", 0.6)
+            _set_input(mnoise, "Distortion", 0.4)
+            nt.links.new(uv.outputs["UV"], mnoise.inputs["Vector"])
+            mrng = _node(nt, "ShaderNodeMapRange", "MAD_MacroRange", _X_TEX + 200, -1800, f_tex, "0.42..0.62 -> 0..0.75")
+            _set_input(mrng, "From Min", 0.42)
+            _set_input(mrng, "From Max", 0.62)
+            _set_input(mrng, "To Max", 0.75)
+            nt.links.new(mnoise.outputs["Fac"], mrng.inputs["Value"])
+            mmix = _node(nt, "ShaderNodeMix", "MAD_MacroMix", _X_PROC - 200, 0, f_wear, "Dry patches")
+            mmix.data_type = 'RGBA'
+            mmix.blend_type = 'MULTIPLY'
+            nt.links.new(mrng.outputs["Result"], NG.mix_socket(mmix, "Factor_Float"))
+            nt.links.new(color_src, NG.mix_socket(mmix, "A_Color"))
+            NG.mix_socket(mmix, "B_Color").default_value = (1.16, 1.09, 0.80, 1.0)
+            bnoise = _node(nt, "ShaderNodeTexNoise", "MAD_MacroBright", _X_TEX, -2100, f_tex, "Brightness drift (~80 m)")
+            bnoise.noise_dimensions = '2D'
+            _set_input(bnoise, "Scale", 0.1)
+            _set_input(bnoise, "Detail", 3.0)
+            _set_input(bnoise, "Roughness", 0.55)
+            nt.links.new(uv.outputs["UV"], bnoise.inputs["Vector"])
+            brng = _node(nt, "ShaderNodeMapRange", "MAD_MacroBrightRange", _X_TEX + 200, -2100, f_tex, "0.3..0.7 -> 0.88..1.08")
+            _set_input(brng, "From Min", 0.3)
+            _set_input(brng, "From Max", 0.7)
+            _set_input(brng, "To Min", 0.88)
+            _set_input(brng, "To Max", 1.08)
+            nt.links.new(bnoise.outputs["Fac"], brng.inputs["Value"])
+            bmix = _node(nt, "ShaderNodeMix", "MAD_MacroBrightMix", _X_PROC - 200, -250, f_wear, "Brightness drift")
+            bmix.data_type = 'RGBA'
+            bmix.blend_type = 'MULTIPLY'
+            NG.mix_socket(bmix, "Factor_Float").default_value = 1.0
+            nt.links.new(NG.mix_result(mmix, "Result_Color"), NG.mix_socket(bmix, "A_Color"))
+            nt.links.new(brng.outputs["Result"], NG.mix_socket(bmix, "B_Color"))
+            color_src = NG.mix_result(bmix, "Result_Color")
         tint = _node(nt, "ShaderNodeMix", "MAD_Tint", _X_PROC, 250, f_wear, "Tint (spec colour / user tint)")
         tint.data_type = 'RGBA'
         tint.blend_type = 'MULTIPLY'
@@ -597,7 +646,45 @@ def _build_flat(mat, nt, spec, settings, missing_set: str | None) -> None:
     if is_paint and spec.alpha == 'MASKED':
         # without the PaintWear chip mask there is nothing to erode with: paint stays fully opaque
         _set_input(bsdf, "Alpha", 1.0)
+    if 'decal' in spec.tags:
+        _set_input(bsdf, "Alpha", 0.0)       # no atlas: the decal sheet stays invisible instead of white
     _finish(mat, nt, bsdf, out, spec, settings, missing_set or "", {}, textured=False)
+
+
+def _build_decal(mat, nt, spec, settings, images, maps, uv, bsdf, out, f_tex, f_wear) -> None:
+    """Alpha-blended decal sheet: atlas colour / roughness, alpha = atlas opacity x per-decal vertex alpha."""
+    uv_out = uv.outputs["UV"]
+
+    def img(name: str, key: str, y: float, label: str):
+        n = _image_node(nt, name, images[key], _X_TEX, y, f_tex, uv_out, label)
+        n.extension = 'EXTEND'
+        return n
+
+    base = img("MAD_BaseColor", library.MAP_BASECOLOR, 250, "Decal colour")
+    nt.links.new(base.outputs["Color"], bsdf.inputs["Base Color"])
+    if library.MAP_ROUGHNESS in images:
+        rough = img("MAD_Roughness", library.MAP_ROUGHNESS, -40, "Roughness")
+        nt.links.new(rough.outputs["Color"], bsdf.inputs["Roughness"])
+    else:
+        _set_input(bsdf, "Roughness", spec.roughness)
+    vc = _node(nt, "ShaderNodeVertexColor", "MAD_Wear", _X_TEX, -620, f_wear, "Per-decal opacity (vertex alpha)")
+    vc.layer_name = "Wear"
+    mul = _node(nt, "ShaderNodeMath", "MAD_DecalAlpha", _X_PROC, -200, f_wear, "Atlas opacity x decal opacity")
+    mul.operation = 'MULTIPLY'
+    mul.use_clamp = True
+    if library.MAP_OPACITY in images:
+        op = img("MAD_Opacity", library.MAP_OPACITY, -330, "Opacity (atlas)")
+        nt.links.new(op.outputs["Color"], mul.inputs[0])
+    else:
+        mul.inputs[0].default_value = 1.0
+    nt.links.new(vc.outputs["Alpha"], mul.inputs[1])
+    gain = _node(nt, "ShaderNodeMath", "MAD_DecalGain", _X_PROC + 220, -200, f_wear, "Global decal opacity")
+    gain.operation = 'MULTIPLY'
+    gain.use_clamp = True
+    gain.inputs[1].default_value = float(_g(settings, "decals.opacity", 1.0))
+    nt.links.new(mul.outputs["Value"], gain.inputs[0])
+    nt.links.new(gain.outputs["Value"], bsdf.inputs["Alpha"])
+    _finish(mat, nt, bsdf, out, spec, settings, spec.texture_set or "", maps, textured=True)
 
 
 # --------------------------------------------------------------------------- public API

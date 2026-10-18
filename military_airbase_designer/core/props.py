@@ -234,6 +234,27 @@ class MAD_MarkingSettings(bpy.types.PropertyGroup):
     striated: BoolProperty(name="Striated wide markings", description="Paint wide markings as 6-in stripes (frost-heave practice)", default=False, update=_upd)
 
 
+class MAD_DecalSettings(bpy.types.PropertyGroup):
+    enabled: BoolProperty(name="Decals", description="Tyre rubber skid marks, turn scuffs, oil stains and exhaust soot (alpha-blended decal sheet)", default=True, update=_upd)
+    seed: IntProperty(name="Decal seed", default=7, min=0, max=99999, update=_upd)
+    skids: BoolProperty(name="Touchdown skid marks", default=True, update=_upd)
+    skid_count: IntProperty(name="Skid marks", description="Touchdown marks per runway (both ends together)", default=90, min=0, max=600, update=_upd)
+    skid_strength: FloatProperty(name="Skid opacity", default=0.75, min=0.0, max=1.0, update=_upd)
+    aircraft_mix: EnumProperty(name="Traffic mix", description="Main-gear tracks and mark sizes of the landing traffic",
+                               items=[('FIGHTER', "Fighters / trainers", "F-16 / F-15 / F-35 / T-38 class tracks"),
+                                      ('MIXED', "Mixed", "Fighters plus tactical and strategic airlift"),
+                                      ('HEAVY', "Heavy / transport", "C-130 / C-17 / A400M / tanker class tracks")],
+                               default='FIGHTER', update=_upd)
+    traffic_split: FloatProperty(name="Landings on low end", description="Share of landings toward the low-numbered threshold (prevailing wind)", default=0.6, min=0.0, max=1.0, update=_upd)
+    touchdown_mean: FloatProperty(name="Touchdown distance", description="Mean touchdown point beyond the threshold", default=ft(1250), min=50.0, max=1500.0, unit='LENGTH', update=_upd)
+    touchdown_spread: FloatProperty(name="Touchdown spread", description="Standard deviation of the touchdown point", default=ft(400), min=10.0, max=800.0, unit='LENGTH', update=_upd)
+    lateral_spread: FloatProperty(name="Lateral spread", description="Standard deviation of the aircraft centreline offset", default=3.0, min=0.0, max=15.0, unit='LENGTH', update=_upd)
+    turn_scuffs: BoolProperty(name="Turn scuffs at exits", default=True, update=_upd)
+    apron_stains: BoolProperty(name="Apron oil stains", default=True, update=_upd)
+    exhaust_stains: BoolProperty(name="Exhaust soot behind spots", default=True, update=_upd)
+    stain_strength: FloatProperty(name="Stain opacity", default=0.7, min=0.0, max=1.0, update=_upd)
+
+
 class MAD_TaxiwayItem(bpy.types.PropertyGroup):
     name: StringProperty(name="Designator", default="A", update=_upd)
     kind: EnumProperty(name="Kind", items=TAXIWAY_KIND_ITEMS, default='CONNECTOR', update=_upd)
@@ -403,6 +424,7 @@ class MAD_BaseSettings(bpy.types.PropertyGroup):
     quality: EnumProperty(name="Quality", items=QUALITY_ITEMS, default='STANDARD', update=_upd)
     runway: PointerProperty(type=MAD_RunwaySettings)
     markings: PointerProperty(type=MAD_MarkingSettings)
+    decals: PointerProperty(type=MAD_DecalSettings)
     taxiways: CollectionProperty(type=MAD_TaxiwayItem)
     taxiway_index: IntProperty(default=0)
     aprons: CollectionProperty(type=MAD_ApronItem)
@@ -445,7 +467,7 @@ class MAD_UISettings(bpy.types.PropertyGroup):
 
 
 CLASSES = (
-    MAD_RunwaySettings, MAD_MarkingSettings, MAD_TaxiwayItem, MAD_ApronItem, MAD_LightingSettings,
+    MAD_RunwaySettings, MAD_MarkingSettings, MAD_DecalSettings, MAD_TaxiwayItem, MAD_ApronItem, MAD_LightingSettings,
     MAD_SignageSettings, MAD_StructureSettings, MAD_PerimeterSettings, MAD_TerrainSettings,
     MAD_MaterialSettings, MAD_ExportSettings, MAD_BaseSettings, MAD_UISettings,
 )

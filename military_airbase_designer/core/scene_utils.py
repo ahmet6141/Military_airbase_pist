@@ -13,7 +13,7 @@ CATEGORY_PROP = "mad_category"
 
 # Sub-collection names (also the categories used by export filters)
 CATEGORIES = (
-    "Pavement", "Markings", "Lighting", "Signage", "Structures", "Perimeter", "Navaids", "Terrain",
+    "Pavement", "Markings", "Decals", "Lighting", "Signage", "Structures", "Perimeter", "Navaids", "Terrain",
 )
 
 

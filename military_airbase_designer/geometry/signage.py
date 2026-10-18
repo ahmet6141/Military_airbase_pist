@@ -99,7 +99,8 @@ RDR_OFFSET = ft(60)           # RDR / AGM row: near edge 50-75 ft from the full-
 RDR_SIZE = 4                  # military RDR and AGM: FAA Size 4 only
 RDR_NUMERAL_H = inch(40)      # 40 in numeral on the 48 in Size 4 panel (UFC 9-6; AC 44L Table 3-1)
 RDR_INTERVAL_FT = 1000.0
-RDR_TOLERANCE = ft(50)        # a station may shift +-50 ft to clear an obstacle, else it is omitted
+RDR_TOLERANCE = ft(50)        # a station may shift +-50 ft to clear an obstacle ...
+RDR_SHIFTS = (RDR_TOLERANCE, -RDR_TOLERANCE, ft(100), -ft(100), ft(150), -ft(150))   # ... then up to 150 ft at taxiway intersections (field practice), else that side is omitted
 AGM_DISC_D = 1.0              # ~39 in yellow translucent disc
 AGM_RDR_CLEAR = ft(20)        # RDR within 20 ft of an AGM moves in line with it ...
 AGM_RDR_SHIFT = ft(5)         # ... and 5 ft outboard
@@ -744,7 +745,7 @@ class _Signage:
                 if near:                                     # in line with the marker, 5 ft outboard
                     px = near[0]
                     py += sgn * AGM_RDR_SHIFT
-                self.place_array('RDR', panels, px, py, (1.0, 0.0), shift_dir=(1.0, 0.0), shifts=(RDR_TOLERANCE, -RDR_TOLERANCE))
+                self.place_array('RDR', panels, px, py, (1.0, 0.0), shift_dir=(1.0, 0.0), shifts=RDR_SHIFTS)
 
     def agm_signs(self) -> None:
         rw = self.rw
@@ -802,7 +803,12 @@ class _Signage:
         self.agm_signs()
         self.wind_cones()
         for kind, n in sorted(self.skipped.items()):
-            self.ctx.warn(f"signage: {n} {kind} omitted (no clear position within tolerance, UFC 9-6/9-2)")
+            if kind in ('RDR', 'AGM'):
+                # one side of a distance-remaining station blocked by a taxiway is normal field practice
+                # (the opposite side still carries the sign) - informational, not a design warning
+                self.ctx.info(f"signage: {n} {kind} face(s) omitted where a taxiway blocks the sign row (UFC 9-6)")
+            else:
+                self.ctx.warn(f"signage: {n} {kind} omitted (no clear position within tolerance, UFC 9-6/9-2)")
 
 
 def build(ctx) -> None:

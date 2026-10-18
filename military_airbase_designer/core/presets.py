@@ -77,7 +77,7 @@ def _reset_group(pg) -> None:
 
 def reset_to_defaults(root: bpy.types.Object, keep_materials: bool = True) -> None:
     s = root.mad
-    for group in ("runway", "markings", "lighting", "signage", "structures", "perimeter", "terrain", "export") + (() if keep_materials else ("materials",)):
+    for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain", "export") + (() if keep_materials else ("materials",)):
         _reset_group(getattr(s, group))
     s.taxiways.clear()
     s.aprons.clear()
@@ -92,7 +92,7 @@ def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True)
     try:
         if reset:
             reset_to_defaults(root, keep_materials=True)
-        for group in ("runway", "markings", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
+        for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
             if group in data:
                 _apply_group(getattr(s, group), data[group])
         for key in ("base_name", "icao_code", "quality"):
@@ -132,7 +132,7 @@ def _group_to_dict(pg) -> dict:
 def settings_to_dict(root: bpy.types.Object, label: str = "") -> dict:
     s = root.mad
     data = {"label": label or s.base_name, "base_name": s.base_name, "icao_code": s.icao_code, "quality": s.quality}
-    for group in ("runway", "markings", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
+    for group in ("runway", "markings", "decals", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
         data[group] = _group_to_dict(getattr(s, group))
     data["taxiways"] = [_group_to_dict(t) for t in s.taxiways]
     data["aprons"] = [_group_to_dict(a) for a in s.aprons]

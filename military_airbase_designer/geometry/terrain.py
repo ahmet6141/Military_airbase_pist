@@ -40,7 +40,7 @@ UNDULATION_FADE = (200.0, 500.0)   # distance from the pavement where undulation
 UNDULATION_PERIOD = 180.0
 ROAD_FLAT = (6.0, 40.0)    # undulation suppressed within 6 m of a road centreline, ramps in to 40 m
 MAX_FACES_STANDARD = 60000
-DIRT_BLEND = 3.0           # G = 1 at the dirt strip fading to 0 over 3 m
+DIRT_BLEND = 2.0           # G = 1 at the dirt strip fading to 0 over 2 m
 
 
 # --------------------------------------------------------------------------- helpers

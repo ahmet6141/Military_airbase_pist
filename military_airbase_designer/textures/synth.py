@@ -40,7 +40,7 @@ from . import io as texio
 from . import noise as N
 
 F32 = np.float32
-VERSION = 3                       # bump when the look changes so cached sets regenerate
+VERSION = 4                       # bump when the look changes so cached sets regenerate
 RESOLUTIONS = (512, 1024, 2048, 4096, 8192)
 PREVIEW_MAX = 512
 MAP_ORDER = ("BaseColor", "Normal", "Roughness", "AO", "Height", "Metallic", "Opacity", "Mask")
@@ -180,6 +180,34 @@ def _box1d(n: int, tile: float, centre_m: float, length_m: float, soft_m: float)
     d = np.abs(_wrapped_delta(_axis_m(n, tile), centre_m, tile))
     s = max(float(soft_m), 0.5 * tile / n)
     return (F32(1.0) - N.smoothstep(0.5 * length_m - s, 0.5 * length_m + s, d)).astype(F32)
+
+
+def _wavy_lines(g: "Gen", count: int, si: int, axis: str, width_m: float, wobble_m: float, gaps: float,
+                res: int | None = None) -> np.ndarray:
+    """Tileable wandering crack lines across the whole tile (thermal / reflective cracking).
+
+    ``axis='y'``: lines of roughly constant x that wander with y (transverse to the paving
+    direction X); ``'x'``: the opposite.  ``gaps`` (0-1) is the fraction of each line that is
+    missing, so cracks start and stop like real ones."""
+    res = res or g.res
+    tile = g.tile
+    rng = N.rng(g.s(si))
+    coord = _axis_m(res, tile)
+    w = max(float(width_m), 1.2 * tile / res)
+    mask = np.zeros((res, res), F32)
+    for _ in range(max(0, int(count))):
+        x0 = rng.random() * tile
+        wob = (N.fbm(1, res, 3, int(rng.integers(1 << 30)), octaves=3, normalize=False)[0] - F32(0.5)) * F32(2.0 * wobble_m)
+        gate = N.fbm(1, res, 2, int(rng.integers(1 << 30)), octaves=2)[0]
+        along = _ss(gaps - 0.08, gaps + 0.08, gate)
+        if axis == 'y':
+            d = _wrapped_delta(coord[None, :], x0, tile) - wob[:, None]
+            prof = np.exp(-(d / w) ** 2).astype(F32) * along[:, None]
+        else:
+            d = _wrapped_delta(coord[:, None], x0, tile) - wob[None, :]
+            prof = np.exp(-(d / w) ** 2).astype(F32) * along[None, :]
+        mask = np.maximum(mask, prof)
+    return mask
 
 
 def _grid_dist_1d(n: int, tile: float, cells: int, phase: float = 0.0) -> np.ndarray:
@@ -355,8 +383,8 @@ def _gen_concrete(g: Gen, kind: str) -> dict:
 
     # ---- distress
     crack_amt = _ss(0.15, 0.85, a)
-    crack = g.cracks(1.0, 6, div=2, threshold=0.05, width=1.0, octaves=4, cell_edges=0.35,
-                     coverage=0.2 + 0.6 * a) * F32(crack_amt) if a > 0.1 else np.zeros((res, res), F32)
+    crack = g.cracks(1.0, 6, div=2, threshold=0.035, width=1.0, octaves=4, cell_edges=0.35,
+                     coverage=0.1 + 0.35 * a) * F32(crack_amt) if a > 0.1 else np.zeros((res, res), F32)
     halo = np.exp(-((d_any - 0.006) / 0.03) ** 2).astype(F32)       # 20-30 mm joint halo (stain / spall zone)
     breakup = F32(0.35) + F32(0.65) * mottle
     bleed = np.exp(-((d_any - 0.006) / 0.04) ** 2).astype(F32) * F32(_ss(0.15, 1.0, a) * (1.0 if runway else 0.6)) * breakup
@@ -396,15 +424,15 @@ def _gen_concrete(g: Gen, kind: str) -> dict:
     h_range = (-8.0, 2.0)
 
     # ---- albedo (linear)
-    new_c = _lin("#B8B7B1")
-    old_c = _lin("#9E9C96")
+    new_c = _lin("#AEADA7")
+    old_c = _lin("#908E88")
     base = new_c + (old_c - new_c) * F32(a)
     lum = tone * (F32(1.0) + F32(0.04) * _signed(macro)) * (F32(1.0) + F32(0.03) * _signed(mottle))
     lum *= F32(1.0) + F32(0.07) * speck * speck_sign
     lum *= F32(1.0) + F32(0.025) * _signed(burlap)
     lum *= F32(1.0) - F32(0.10) * halo * breakup * F32(0.3 + 0.7 * a)
     lum *= F32(1.0) - F32(0.35) * bleed
-    lum *= F32(1.0) - F32(0.45) * crack
+    lum *= F32(1.0) - F32(0.32) * crack
     lum *= F32(1.0) - F32(0.22) * spall
     lum *= F32(1.0) - F32(0.35) * scuff
     if groove is not None:
@@ -453,24 +481,32 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     seam = np.exp(-(d_seam / 0.05) ** 2).astype(F32)
     lane_id = (np.floor((_axis_m(res, tile) + 0.0) / (tile / lanes)).astype(np.int64) % lanes)
     lane_tone = (F32(1.0) + F32(0.025) * _signed(N.rng(g.s(5)).random(lanes).astype(F32)))[lane_id][:, None]
-    seam_crack = np.exp(-(d_seam / 0.008) ** 2).astype(F32) * F32(_ss(0.3, 1.0, a))
+    # longitudinal joint cracking: only parts of the cold joints open up (ASTM D5340 "joint reflection")
+    seam_crack = np.exp(-(d_seam / 0.006) ** 2).astype(F32) * F32(_ss(0.3, 1.0, a))
+    seam_crack = seam_crack * _ss(0.42, 0.58, g.fbm(2.0, 2, 14, div=4))
 
     # ---- cracks + crack seal
+    # Real airfield asphalt shows (1) transverse thermal cracks every 5-12 m that wander across the lanes,
+    # (2) opened longitudinal joints and (3) a few meandering random cracks; block / alligator cracking
+    # only on old shoulders.  Everything is routed and sealed (P-605 hot-pour, 60-100 mm band).
     crack_amt = _ss(0.1, 0.8, a)
     if a > 0.05:
         cr_res = min(g.sub_res(2), 2048)
-        # sparse crack network: real airfield asphalt shows a few sealed cracks per 10 m, not a dense web
-        cr = N.cracks(cr_res, cr_res, g.period(3.2 if kind != "shoulder" else 1.6, cr_res), g.s(6), threshold=0.06,
-                      width=0.8, octaves=4, cell_edges=0.5 if kind == "shoulder" else 0.25, coverage=0.05 + 0.4 * a)
-        seal_lo = N.blur(cr, max(1, int(round(0.018 * cr_res / tile))))
-        seal_lo = _ss(0.08, 0.3, N.normalize01(seal_lo) if seal_lo.max() > 0 else seal_lo)
+        cr = N.cracks(cr_res, cr_res, g.period(4.0 if kind != "shoulder" else 1.8, cr_res), g.s(6), threshold=0.05,
+                      width=0.8, octaves=4, cell_edges=0.3 if kind == "shoulder" else 0.0,
+                      coverage=(0.1 + 0.3 * a) if kind == "shoulder" else (0.03 + 0.22 * a))
+        n_trans = 2 if kind == "shoulder" else 1
+        trans = _wavy_lines(g, n_trans, 15, 'y', 0.0035, 0.09, 0.3, res=cr_res) * F32(_ss(0.3, 0.65, a))
+        cr = np.maximum(cr, trans)
+        seal_lo = N.blur(cr, max(1, int(round(0.03 * cr_res / tile))))
+        seal_lo = _ss(0.06, 0.25, N.normalize01(seal_lo) if seal_lo.max() > 0 else seal_lo)
         crack = g.up(cr) * F32(crack_amt)
-        seal = g.up(seal_lo) * _ss(0.45, 0.7, g.fbm(1.2, 3, 7, div=4)) * F32(crack_amt)
-        del cr, seal_lo
+        seal = g.up(seal_lo) * _ss(0.35, 0.6, g.fbm(1.2, 3, 7, div=4)) * F32(crack_amt)
+        del cr, seal_lo, trans
     else:
         crack = np.zeros((res, res), F32)
         seal = crack
-    seal = np.maximum(seal, seam_crack * F32(0.8))
+    seal = np.maximum(seal, seam_crack * F32(0.85))
 
     # ---- rubber streaks along X (low intensity; the TDZ build-up comes from vertex colour)
     rub_amt = 0.28 * p.rubber if kind == "runway" else 0.10
@@ -479,19 +515,14 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     # ---- ravelling / patches / dust
     ravel = np.zeros((res, res), F32)
     if kind in ("taxiway", "shoulder"):
-        ravel = _ss(0.55, 0.75, g.fbm(1.2, 3, 9, div=4)) * F32(a)
+        ravel = _ss(0.66, 0.84, g.fbm(1.0, 3, 9, div=4)) * F32(0.5 * a)
+    # (no rectangular utility-cut patches: anything that distinct repeats visibly with the 6 m tile)
     patch = np.zeros((res, res), F32)
     patch_tone = np.ones((res, res), F32)
     patch_edge = np.zeros((res, res), F32)
-    if kind == "taxiway":
-        for m, rnd in g.rect_mask(2, (0.9, 2.4), 10, soft_m=0.01):
-            patch = np.maximum(patch, m)
-            patch_tone *= F32(1.0) + (F32(0.16) if rnd > 0.5 else F32(-0.12)) * m
-            inner = N.blur(m, max(1, int(round(g.px(0.03)))))
-            patch_edge = np.maximum(patch_edge, np.clip((m - inner) * F32(3.0), 0.0, 1.0) + np.clip((inner - m) * F32(3.0), 0.0, 1.0))
     dust = np.zeros((res, res), F32)
     if kind == "shoulder":
-        dust = _ss(0.5, 0.8, g.fbm(2.0, 3, 11, div=4)) * F32(0.3 + 0.7 * p.dirt)
+        dust = _ss(0.55, 0.85, g.fbm(2.0, 3, 11, div=4)) * F32(0.3 + 0.7 * p.dirt)
 
     # ---- height (mm)
     h = stones * F32(1.6) + small * F32(0.6) - F32(0.4)
@@ -507,22 +538,22 @@ def _gen_asphalt(g: Gen, kind: str) -> dict:
     binder = binder + (binder_old - binder) * F32(a)
     stone_c = _lin("#8C8780")
     expo = stones * F32(0.35 + 0.55 * a) * (F32(0.6) + F32(0.8) * stone_tone) + small * F32(0.1 + 0.25 * a)
-    expo = np.clip(expo + ravel * F32(0.3), 0.0, 1.0)
+    expo = np.clip(expo + ravel * F32(0.15), 0.0, 1.0)
     albedo = _grey(np.ones((res, res), F32), binder)
     albedo = _mix(albedo, stone_c, expo)
-    albedo = _mul(albedo, (F32(1.0) + F32(0.06) * _signed(macro)) * (F32(1.0) + F32(0.05) * _signed(mottle)) * lane_tone * patch_tone)
+    albedo = _mul(albedo, (F32(1.0) + F32(0.04) * _signed(macro)) * (F32(1.0) + F32(0.035) * _signed(mottle)) * lane_tone * patch_tone)
     albedo = _mul(albedo, F32(1.0) - F32(0.08) * seam)
     albedo = _mul(albedo, F32(1.0) - F32(0.4) * crack)
-    albedo = _mix(albedo, _lin("#1E1E1D"), np.clip(seal + patch_edge, 0, 1) * F32(0.6))
+    albedo = _mix(albedo, _lin("#1C1C1B"), np.clip(seal + patch_edge, 0, 1) * F32(0.65))
     albedo = _mul(albedo, F32(1.0) - F32(0.55) * rub)
     if kind == "shoulder":
-        albedo = _mix(albedo, _lin("#A99E8C"), dust * F32(0.5))
+        albedo = _mix(albedo, _lin("#A99E8C"), dust * F32(0.3))
 
     # ---- roughness
     rough = F32(0.62 + 0.30 * a) + F32(0.08) * (stones - F32(0.3)) + F32(0.03) * _signed(mottle)
     rough += F32(0.06) * ravel + F32(0.04) * crack
     rough -= F32(0.25) * rub
-    rough = rough + (F32(0.45) - rough) * np.clip(seal + patch_edge, 0, 1)
+    rough = rough + (F32(0.58) - rough) * np.clip(seal + patch_edge, 0, 1)
     rough = rough + (F32(1.0) - rough) * dust
     rough = np.clip(rough, 0.3, 0.98)
     return {"albedo": albedo, "height_mm": h, "rough": rough, "height_range": h_range, "metallic": 0.0,
@@ -541,11 +572,11 @@ def _gen_grass(g: Gen) -> dict:
     clover = dots * _ss(0.8, 0.9, gate)
     dirt = dots * _ss(0.16, 0.06, gate) * F32(0.4 + 0.6 * p.dirt)
     base = _lin("#5E6E38")
-    albedo = _grey(F32(0.72) + F32(0.56) * fine, base)
-    albedo = _mul(albedo, F32(0.9) + F32(0.2) * clumps)
-    albedo = _mix(albedo, _lin("#4A5A2E"), dark * F32(0.3))
-    albedo = _mix(albedo, _lin("#8C8A55"), dry * F32(0.35))
-    albedo = _mix(albedo, _lin("#7E9448"), clover * F32(0.4))
+    albedo = _grey(F32(0.78) + F32(0.44) * fine, base)
+    albedo = _mul(albedo, F32(0.93) + F32(0.14) * clumps)
+    albedo = _mix(albedo, _lin("#4A5A2E"), dark * F32(0.18))
+    albedo = _mix(albedo, _lin("#8C8A55"), dry * F32(0.2))
+    albedo = _mix(albedo, _lin("#7E9448"), clover * F32(0.3))
     albedo = _mix(albedo, _lin("#6B5A45"), dirt * F32(0.8))
     if p.mowing_stripes:
         stripes_n = max(1, int(round(tile / 7.0)))                         # 2 passes of a 3.5 m mower per period
@@ -576,7 +607,7 @@ def _gen_dirt(g: Gen) -> dict:
     rut *= F32(0.6) + F32(0.4) * g.fbm(0.5, 3, 5, div=4)
     crack = g.cracks(0.35, 6, div=2, threshold=0.02, width=1.2, octaves=3, cell_edges=1.0, coverage=0.5)
     crack *= _ss(0.5, 0.7, g.fbm(1.5, 3, 7, div=4)) * F32(1.0 - 0.6 * p.wet)
-    base = _lin("#7C6B52")
+    base = _lin("#74695A")
     albedo = _grey((F32(1.0) + F32(0.2) * _signed(mottle)) * (F32(1.0) + F32(0.08) * _signed(fine)), base)
     albedo = _mix(albedo, _lin("#A39A88"), stones * F32(0.7))
     albedo = _mul(albedo, F32(1.0) - F32(0.14) * rut)
@@ -634,7 +665,7 @@ def _gen_paint_wear(g: Gen) -> dict:
     lum = (F32(0.90) + F32(0.10) * chalk) * (F32(1.0) - F32(0.35) * dirt)
     albedo = _grey(lum, np.ones(3, F32))
     h = intact * F32(0.4) + beads * F32(0.12) + g.fbm(0.02, 2, 8) * F32(0.05)
-    rough = F32(0.55) * intact + F32(0.8) * worn + F32(0.12) * dirt - F32(0.2) * beads + F32(0.05) * _signed(chalk)
+    rough = F32(0.72) * intact + F32(0.86) * worn + F32(0.1) * dirt - F32(0.14) * beads + F32(0.04) * _signed(chalk)   # airfield paint is matte
     mask = np.stack([intact, dirt, beads, np.ones((res, res), F32)], axis=2)
     return {"albedo": albedo, "height_mm": h, "rough": np.clip(rough, 0.3, 0.95), "height_range": (0.0, 0.6),
             "metallic": 0.0, "opacity": intact, "mask": mask, "ao_radius_m": 0.004, "ao_strength": 0.3,
@@ -805,6 +836,137 @@ def _gen_roof(g: Gen) -> dict:
 
 
 # =========================================================================== texture set table
+# =========================================================================== decals atlas
+def _cell_uv(cr: int) -> tuple[np.ndarray, np.ndarray]:
+    """(u row-vector, v column-vector) pixel-centre coordinates of a cr x cr cell in [0, 1]."""
+    a = ((np.arange(cr, dtype=np.float64) + 0.5) / cr).astype(F32)
+    return a[None, :], a[:, None]
+
+
+def _decal_skid(cr: int, seed: int, twin: bool = False, start_blob: bool = False, fade_both: bool = False,
+                thin: bool = False) -> np.ndarray:
+    """Tyre rubber streak along u (u = 0 is the touchdown point)."""
+    u, v = _cell_uv(cr)
+    wob = (N.fbm(1, cr, 3, seed + 1, octaves=3)[0] - F32(0.5)) * F32(0.05)
+    hw = F32(0.07 if thin else 0.12) * (F32(1.0) + F32(0.35) * (N.fbm(1, cr, 4, seed + 2, octaves=2)[0] - F32(0.5)))
+
+    def lane(vc: float) -> np.ndarray:
+        d = np.abs(v - F32(vc) - wob[None, :]) / hw[None, :]
+        return np.exp(-(d * d) * F32(1.4)).astype(F32)
+
+    prof = np.maximum(lane(0.36), lane(0.64)) if twin else lane(0.5)
+    if start_blob:
+        along = _ss(0.0, 0.04, u) * (F32(0.25) + F32(0.75) * np.exp(-np.clip(u - F32(0.08), 0, None) / F32(0.22)))
+        along = along * (F32(1.0) - _ss(0.8, 1.0, u))
+    elif fade_both:
+        along = np.sin(np.pi * u).astype(F32) ** F32(0.7)
+    else:
+        along = _ss(0.0, 0.05, u) * (F32(1.0) - F32(0.5) * u) * (F32(1.0) - _ss(0.82, 1.0, u))
+    tread = F32(0.5) + F32(0.5) * N.anisotropic_fbm(cr, cr, 2, 28, seed + 3, octaves=3)      # streaky along u
+    breakup = F32(0.7) + F32(0.3) * N.fbm(cr, cr, 6, seed + 4, octaves=3)
+    return np.clip(prof * along * tread * breakup, 0.0, 1.0).astype(F32)
+
+
+def _decal_stain(cr: int, seed: int, radius: float = 0.3, irregular: float = 0.3, soft: float = 0.12,
+                 drips: int = 0, strength: float = 1.0) -> np.ndarray:
+    u, v = _cell_uv(cr)
+    r = np.sqrt((u - F32(0.5)) ** 2 + (v - F32(0.5)) ** 2)
+    noise = N.fbm(cr, cr, 3, seed, octaves=4) - F32(0.5)
+    edge_r = F32(radius) * (F32(1.0) + F32(2.0 * irregular) * noise)
+    alpha = F32(1.0) - N.smoothstep_arr(edge_r * F32(1.0 - soft), edge_r * F32(1.0 + soft), r)
+    mottle = F32(0.75) + F32(0.25) * N.fbm(cr, cr, 10, seed + 1, octaves=3)
+    centre = F32(0.7) + F32(0.3) * np.clip(F32(1.0) - r / np.maximum(edge_r, F32(1e-3)), 0.0, 1.0)
+    alpha = alpha * mottle * centre
+    rng = N.rng(seed + 7)
+    for _ in range(max(0, int(drips))):
+        ang = rng.uniform(0.0, 2.0 * np.pi)
+        x0 = 0.5 + np.cos(ang) * radius * 0.8
+        y0 = 0.5 + np.sin(ang) * radius * 0.8
+        length = rng.uniform(0.08, 0.25)
+        w = rng.uniform(0.012, 0.03)
+        dy = v - F32(y0)
+        drip = np.exp(-((u - F32(x0)) / F32(w)) ** 2) * ((dy >= 0) & (dy <= length)).astype(F32) * (F32(1.0) - dy / F32(length))
+        alpha = np.maximum(alpha, np.clip(drip, 0.0, 1.0) * F32(0.8))
+    return np.clip(alpha * F32(strength), 0.0, 1.0).astype(F32)
+
+
+def _decal_drips(cr: int, seed: int, count: int = 8) -> np.ndarray:
+    u, v = _cell_uv(cr)
+    rng = N.rng(seed)
+    alpha = np.zeros((cr, cr), F32)
+    for _ in range(count):
+        cx, cy = rng.uniform(0.2, 0.8), rng.uniform(0.2, 0.8)
+        rad = rng.uniform(0.025, 0.07)
+        r = np.sqrt((u - F32(cx)) ** 2 + (v - F32(cy)) ** 2)
+        alpha = np.maximum(alpha, (F32(1.0) - N.smoothstep_arr(F32(rad * 0.7), F32(rad), r)) * F32(rng.uniform(0.5, 1.0)))
+    return alpha
+
+
+def _decal_exhaust(cr: int, seed: int) -> np.ndarray:
+    u, v = _cell_uv(cr)
+    half = F32(0.07) + F32(0.3) * u
+    core = np.exp(-((v - F32(0.5)) / half) ** 2 * F32(1.6))
+    along = _ss(0.0, 0.05, u) * (F32(1.0) - F32(0.85) * _ss(0.3, 1.0, u))
+    wisps = F32(0.55) + F32(0.45) * N.anisotropic_fbm(cr, cr, 3, 12, seed, octaves=4)
+    return np.clip(core * along * wisps, 0.0, 1.0).astype(F32)
+
+
+def _decal_rust(cr: int, seed: int) -> np.ndarray:
+    u, v = _cell_uv(cr)
+    wob = (N.fbm(1, cr, 3, seed, octaves=3)[0] - F32(0.5)) * F32(0.04)
+    w = F32(0.035) * (F32(1.0) + F32(0.5) * (N.fbm(1, cr, 5, seed + 1, octaves=2)[0] - F32(0.5)))
+    prof = np.exp(-((u - F32(0.5) - wob[:, None]) / w[:, None]) ** 2)
+    along = _ss(0.05, 0.15, v) * (F32(1.0) - _ss(0.6, 0.95, v))
+    return np.clip(prof * along * (F32(0.6) + F32(0.4) * N.fbm(cr, cr, 8, seed + 2, octaves=3)), 0.0, 1.0).astype(F32)
+
+
+def _gen_decals(g: Gen) -> dict:
+    """Decal atlas (4 x 4 cells): tyre rubber, oil / hydraulic stains, exhaust soot, grime.
+
+    Cell table: ``core.constants.DECAL_ATLAS``.  Opacity carries the shape; BaseColor / Roughness are the
+    deposit itself (rubber albedo ~0.02, slightly glossy; oil darker and glossier; soot matte)."""
+    p, res = g.p, g.res
+    n = C.DECAL_GRID
+    cr = max(32, res // n)
+    base_seed = g.s(0)
+    albedo = np.zeros((res, res, 3), F32)
+    rough = np.full((res, res), 0.8, F32)
+    opacity = np.zeros((res, res), F32)
+    rubber = _lin("#171717")
+    oil = _lin("#100D0A")
+    soot = _lin("#1B1917")
+    grime = _lin("#3A3630")
+    rust = _lin("#5A3A20")
+    cells = {
+        "skid": (lambda s: _decal_skid(cr, s), rubber, 0.55),
+        "skid_fade": (lambda s: _decal_skid(cr, s, fade_both=True), rubber, 0.58),
+        "skid_twin": (lambda s: _decal_skid(cr, s, twin=True), rubber, 0.55),
+        "touch_blob": (lambda s: _decal_skid(cr, s, start_blob=True), rubber, 0.5),
+        "oil_round": (lambda s: _decal_stain(cr, s, radius=0.3, irregular=0.2, soft=0.1), oil, 0.3),
+        "oil_spread": (lambda s: _decal_stain(cr, s, radius=0.26, irregular=0.45, soft=0.15, drips=3), oil, 0.32),
+        "drip_cluster": (lambda s: _decal_drips(cr, s, 9), oil, 0.35),
+        "fuel_spill": (lambda s: _decal_stain(cr, s, radius=0.38, irregular=0.35, soft=0.45, strength=0.55), _lin("#2A2622"), 0.5),
+        "exhaust": (lambda s: _decal_exhaust(cr, s), soot, 0.75),
+        "scuff_arc": (lambda s: _decal_skid(cr, s, fade_both=True, thin=True) * F32(0.7), rubber, 0.6),
+        "grime": (lambda s: _decal_stain(cr, s, radius=0.36, irregular=0.4, soft=0.5, strength=0.45), grime, 0.85),
+        "rust_streak": (lambda s: _decal_rust(cr, s), rust, 0.8),
+    }
+    for i, (name, (col, row)) in enumerate(C.DECAL_ATLAS.items()):
+        fn, colour, rgh = cells[name]
+        a = fn(base_seed + 31 * (i + 1))
+        var = F32(0.85) + F32(0.3) * N.fbm(cr, cr, 5, base_seed + 97 * (i + 1), octaves=3)
+        y0, x0 = row * cr, col * cr
+        opacity[y0:y0 + cr, x0:x0 + cr] = a
+        albedo[y0:y0 + cr, x0:x0 + cr] = _grey(var, colour)
+        rough[y0:y0 + cr, x0:x0 + cr] = F32(rgh) + F32(0.08) * (var - F32(1.0))
+    if res > n * cr:                                                 # resolution not divisible: pad stays empty
+        pass
+    zeros = np.zeros((res, res), F32)
+    return {"albedo": np.clip(albedo, 0.0, 1.0), "height_mm": zeros, "rough": np.clip(rough, 0.2, 0.95),
+            "height_range": (0.0, 1.0), "metallic": 0.0, "opacity": opacity, "ao_const": 1.0, "puddles": False,
+            "normal_scale": 0.0}
+
+
 @dataclass(frozen=True)
 class TextureSetSpec:
     name: str
@@ -831,6 +993,7 @@ TEXTURE_SETS: dict[str, TextureSetSpec] = {s.name: s for s in [
     TextureSetSpec("Dirt", 4.0, _gen_dirt, _BASE_MAPS, False, "terrain", ("dirt", "wet")),
     TextureSetSpec("Gravel", 3.0, _gen_gravel, _BASE_MAPS, False, "terrain", ("wet",)),
     TextureSetSpec("PaintWear", 2.0, _gen_paint_wear, _BASE_MAPS + ("Opacity", "Mask"), True, "paint", ("age", "dirt")),
+    TextureSetSpec("Decals", 1.0, _gen_decals, _BASE_MAPS + ("Opacity",), True, "decal", ()),
     TextureSetSpec("ChainLink", 1.0, _gen_chain_link, _BASE_MAPS + ("Metallic", "Opacity"), True, "structure", ("age",)),
     TextureSetSpec("ConcreteWall", 3.0, _gen_concrete_wall, _BASE_MAPS, False, "structure", ("age", "concrete_tint")),
     TextureSetSpec("CorrugatedSteel", 2.0, _gen_corrugated, _BASE_MAPS + ("Metallic",), False, "structure", ("age",)),

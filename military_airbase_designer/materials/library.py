@@ -28,7 +28,7 @@ class MaterialSpec:
     tile: float = 4.0                # metres per texture repeat (UVs are baked as xy / tile)
     emission: str | None = None      # emissive colour (lights); strength from settings.lighting
     emission_strength: float = 0.0
-    alpha: str = 'OPAQUE'            # OPAQUE | MASKED (paint wear / chain link) 
+    alpha: str = 'OPAQUE'            # OPAQUE | MASKED (paint wear / chain link) | BLEND (decal sheet)
     wear_channel: str | None = None  # vertex colour channel driving darkening: 'R' rubber, 'G' dirt, 'A' paint wear
     normal_strength: float = 1.0
     specular: float = 0.5
@@ -57,14 +57,15 @@ SPECS: dict[str, MaterialSpec] = {s.name: s for s in [
     _s('Dirt', "#7C6B52", roughness=0.95, texture_set='Dirt', tile=4.0, tags=('terrain',)),
     _s('EarthBerm', "#6F6A4E", roughness=0.95, texture_set='Grass', tile=6.0, tags=('terrain',)),
     # ---- paint (masked by wear alpha)
-    _s('PaintWhite', C.PAINT_WHITE, roughness=0.6, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('PaintYellow', C.PAINT_YELLOW, roughness=0.62, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('PaintRed', C.PAINT_RED, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('PaintBlack', C.PAINT_BLACK, roughness=0.75, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('PaintOrange', C.PAINT_ORANGE, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('PaintGreen', C.PAINT_GREEN, roughness=0.7, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('RoadPaintWhite', C.ROAD_WHITE, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
-    _s('RoadPaintYellow', C.ROAD_YELLOW, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', tags=('paint',)),
+    _s('PaintWhite', C.PAINT_WHITE, roughness=0.6, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('PaintYellow', C.PAINT_YELLOW, roughness=0.62, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('PaintRed', C.PAINT_RED, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('PaintBlack', C.PAINT_BLACK, roughness=0.88, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('PaintOrange', C.PAINT_ORANGE, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('PaintGreen', C.PAINT_GREEN, roughness=0.7, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('RoadPaintWhite', C.ROAD_WHITE, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
+    _s('Decals', "#FFFFFF", roughness=0.6, texture_set='Decals', tile=1.0, alpha='BLEND', specular=0.3, tags=('decal',)),
+    _s('RoadPaintYellow', C.ROAD_YELLOW, roughness=0.65, texture_set='PaintWear', tile=2.0, alpha='MASKED', wear_channel='A', specular=0.3, tags=('paint',)),
     # ---- fixtures / props (flat PBR)
     _s('FixtureYellow', C.FIXTURE_YELLOW, roughness=0.45, metallic=0.0, tags=('prop',)),
     _s('FixtureAluminum', C.FIXTURE_ALUMINUM, roughness=0.4, metallic=0.9, tags=('prop',)),

@@ -24,7 +24,7 @@ PAINT_WHITE = "#F2F3EA"        # White 37925 (retro-reflective, glass beads)
 PAINT_WHITE_WEATHERED = "#D9D8CE"
 PAINT_YELLOW = "#F7C431"       # Yellow 33538 fresh airfield yellow
 PAINT_YELLOW_WEATHERED = "#C9A24A"
-PAINT_RED = "#A83A34"          # Red 31136 (slightly brighter than chip for paint)
+PAINT_RED = "#9E2E2A"          # Red 31136 (slightly brighter than chip for paint)
 PAINT_BLACK = "#2A2B2C"        # Black 37038 border paint
 PAINT_ORANGE = "#C14429"       # Orange 12197 (compass rose, obstruction)
 PAINT_GREEN = "#476753"        # Green 34108
@@ -215,3 +215,24 @@ def srgb_to_linear(c: float) -> float:
 def hex_to_linear(h: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
     r, g, b = hex_to_rgb(h)
     return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), alpha)
+
+
+# --------------------------------------------------------------------------- decal atlas
+# T_MAD_Decals_*: 4 x 4 cells (column, row from the top).  geometry.decals maps quads onto a cell,
+# textures.synth._gen_decals paints them.  Keep the two in sync through this table.
+DECAL_GRID = 4
+DECAL_ATLAS = {
+    "skid":        (0, 0),   # touchdown skid: strong start, fading tail
+    "skid_fade":   (1, 0),   # rollout / braking streak fading at both ends
+    "skid_twin":   (2, 0),   # twin-wheel bogie (two parallel streaks)
+    "touch_blob":  (3, 0),   # short intense touchdown smoke patch
+    "oil_round":   (0, 1),   # engine / gearbox drip stain
+    "oil_spread":  (1, 1),   # spread hydraulic / oil stain with drips
+    "drip_cluster": (2, 1),  # cluster of small drips
+    "fuel_spill":  (3, 1),   # large faint fuel / wash stain
+    "exhaust":     (0, 2),   # jet exhaust soot fan (nozzle at u = 0)
+    "scuff_arc":   (1, 2),   # light tyre scuff (turns)
+    "grime":       (2, 2),   # soft grime patch
+    "rust_streak": (3, 2),   # water / rust run-off streak
+}
+DECAL_Z = MARKING_Z + 0.0015   # decals float above paint: rubber and soot cover markings

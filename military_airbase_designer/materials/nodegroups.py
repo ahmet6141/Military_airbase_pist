@@ -44,7 +44,7 @@ WEARBLEND = "MAD_WearBlend"
 PAINTMASK = "MAD_PaintMask"
 
 RUBBER_COLOR = C.hex_to_linear("#1A1A1A")
-DIRT_COLOR = C.hex_to_linear("#8C7E66")
+DIRT_COLOR = C.hex_to_linear("#847A6B")
 PAINT_DIRT_MULT = (0.62, 0.56, 0.47, 1.0)   # multiplier that turns white paint dusty tan
 
 __all__ = ["GROUP_VERSION", "WEARBLEND", "PAINTMASK", "wear_blend_group", "paint_mask_group",

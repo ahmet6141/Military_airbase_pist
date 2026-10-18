@@ -182,6 +182,39 @@ class MAD_PT_markings(_SubPanel, bpy.types.Panel):
         col.prop(m, "road_markings")
 
 
+# =========================================================================== decals
+class MAD_PT_decals(_SubPanel, bpy.types.Panel):
+    bl_label = "Decals & Wear"
+    bl_idname = "MAD_PT_decals"
+
+    def draw_header(self, context):
+        self.layout.prop(self.settings(context).decals, "enabled", text="")
+
+    def draw(self, context):
+        layout = self.prep()
+        d = self.settings(context).decals
+        layout.active = d.enabled
+        col = layout.column(align=True)
+        col.prop(d, "aircraft_mix")
+        col.prop(d, "seed")
+        layout.separator()
+        col = layout.column(heading="Runway", align=True)
+        col.prop(d, "skids")
+        sub = col.column(align=True)
+        sub.active = d.skids
+        sub.prop(d, "skid_count")
+        sub.prop(d, "skid_strength")
+        sub.prop(d, "traffic_split")
+        sub.prop(d, "touchdown_mean")
+        sub.prop(d, "touchdown_spread")
+        sub.prop(d, "lateral_spread")
+        col.prop(d, "turn_scuffs")
+        col = layout.column(heading="Aprons", align=True)
+        col.prop(d, "apron_stains")
+        col.prop(d, "exhaust_stains")
+        col.prop(d, "stain_strength")
+
+
 # =========================================================================== taxiways
 class MAD_PT_taxiways(_SubPanel, bpy.types.Panel):
     bl_label = "Taxiways"
@@ -513,7 +546,7 @@ def _add_menu(self, context):
     self.layout.operator("mad.create_base", text="Military Airbase", icon='AUTO')
 
 
-CLASSES = (MAD_PT_main, MAD_PT_runway, MAD_PT_markings, MAD_PT_taxiways, MAD_PT_aprons, MAD_PT_lighting,
+CLASSES = (MAD_PT_main, MAD_PT_runway, MAD_PT_markings, MAD_PT_decals, MAD_PT_taxiways, MAD_PT_aprons, MAD_PT_lighting,
            MAD_PT_signage, MAD_PT_structures, MAD_PT_perimeter, MAD_PT_materials, MAD_PT_export, MAD_PT_help)
 
 

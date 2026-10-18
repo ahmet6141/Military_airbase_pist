@@ -22,7 +22,7 @@ from ..core.props import resume_updates, suspend_updates
 from ..materials.library import MaterialGetter
 from . import plan as planmod
 
-MODULE_ORDER = ("pavement", "terrain", "markings", "lighting", "signage", "structures", "perimeter", "navaids")
+MODULE_ORDER = ("pavement", "terrain", "markings", "decals", "lighting", "signage", "structures", "perimeter", "navaids")
 
 
 @dataclass
@@ -35,6 +35,7 @@ class BuildContext:
     quality: str = 'STANDARD'
     stats: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
     meshes: dict[str, bpy.types.Mesh] = field(default_factory=dict)      # shared instance meshes by key
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -75,6 +76,10 @@ class BuildContext:
     def warn(self, msg: str) -> None:
         self.warnings.append(msg)
 
+    def info(self, msg: str) -> None:
+        """Informational note (shown in the build log / console, not as a warning)."""
+        self.notes.append(msg)
+
     @property
     def detail(self) -> float:
         """0.5 preview, 1.0 standard, 1.5 high — builders scale tessellation / prop density with it."""
@@ -86,8 +91,8 @@ class BuildContext:
 
 
 def _import_modules():
-    from ..geometry import lighting, markings, navaids, pavement, perimeter, signage, structures, terrain
-    return {"pavement": pavement, "terrain": terrain, "markings": markings, "lighting": lighting,
+    from ..geometry import decals, lighting, markings, navaids, pavement, perimeter, signage, structures, terrain
+    return {"pavement": pavement, "terrain": terrain, "markings": markings, "decals": decals, "lighting": lighting,
             "signage": signage, "structures": structures, "perimeter": perimeter, "navaids": navaids}
 
 
@@ -141,6 +146,7 @@ def _module_enabled(name: str, s) -> bool:
         "pavement": True,
         "terrain": s.terrain.enabled,
         "markings": s.markings.enabled,
+        "decals": s.decals.enabled,
         "lighting": s.lighting.enabled,
         "signage": s.signage.enabled,
         "structures": s.structures.enabled,

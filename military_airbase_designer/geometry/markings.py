@@ -37,6 +37,7 @@ FAMILIES = {
     "RoadWhite": ("RoadPaintWhite", C.MARKING_Z, "RoadWhite"),
 }
 BORDERED_FAMILIES = ("centerline", "threshold", "designator", "aiming", "tdz", "hold", "taxi_cl", "sphps", "lead_in")
+TEXT_LIFT = 0.001    # text painted over a painted background sits 1 mm higher (coplanar paint z-fights)
 MAX_SEG = 1.0        # arc segmentation for curved paint (m)
 SEG_STEP = 0.5       # polyline sub-segment length for interruption tests (m)
 
@@ -160,15 +161,17 @@ class Painter:
         self.pos: dict[str, list[Poly]] = {k: [] for k in FAMILIES}
         self.holes: dict[str, list[Poly]] = {k: [] for k in FAMILIES}
         self.zone: dict[str, list[str]] = {k: [] for k in FAMILIES}   # per positive: 'RUNWAY' / 'SHOULDER' / 'OTHER' / 'ROAD'
+        self.lift: dict[str, list[float]] = {k: [] for k in FAMILIES}  # per positive: extra z (text over a painted background)
         self.count: dict[str, int] = {}
 
     def add(self, family: str, poly: Sequence[Point], zone: str = "OTHER", bordered: bool = False,
-            holes: Sequence[Sequence[Point]] = (), kind: str = "") -> None:
+            holes: Sequence[Sequence[Point]] = (), kind: str = "", lift: float = 0.0) -> None:
         p = g.ensure_ccw(poly)
         if len(p) < 3 or g.area(p) < 1e-4:
             return
         self.pos[family].append(p)
         self.zone[family].append(zone)
+        self.lift[family].append(lift)
         for h in holes:
             hh = g.ensure_ccw(h)
             if len(hh) >= 3:
@@ -178,6 +181,7 @@ class Painter:
         if bordered and self.border > 0:
             self.pos["Black"].append(g.offset_loop(p, self.border))
             self.zone["Black"].append(zone)
+            self.lift["Black"].append(0.0)
             for h in holes:
                 hh = g.ensure_ccw(h)
                 if len(hh) >= 3 and g.area(hh) > 4 * self.border * self.border:
@@ -224,16 +228,20 @@ class Painter:
             if not tris:
                 continue
             zones = self.zone[fam]
+            lifts = self.lift[fam]
             zone_of_tri = [zones[min(o)] if o else "OTHER" for o in origins]
+            lift_of_tri = [max(lifts[k] for k in o) if o else 0.0 for o in origins]
             # per-vertex zone = zone of the first triangle using it (markings of different zones never share verts)
             vzone = ["OTHER"] * len(pts)
-            for t, zz in zip(tris, zone_of_tri):
+            vlift = [0.0] * len(pts)
+            for t, zz, lf in zip(tris, zone_of_tri, lift_of_tri):
                 for i in t:
                     vzone[i] = zz
+                    vlift[i] = max(vlift[i], lf)
             b = MeshBuilder(default_color=(0.0, 0.0, 0.5, 1.0))
             base = len(b.verts)
             for i, p in enumerate(pts):
-                b.add_vertex((p[0], p[1], z_fn(p[0], p[1], vzone[i]) + z_off))
+                b.add_vertex((p[0], p[1], z_fn(p[0], p[1], vzone[i]) + z_off + vlift[i]))
             for t in tris:
                 # Wear = (rubber 0, dirt 0, macro neutral 0.5, paint-wear alpha)
                 cols = [(0.0, 0.0, 0.5, wear_fn(pts[i][0], pts[i][1], vzone[i])) for i in t]
@@ -953,7 +961,7 @@ def _surface_signs(painter: Painter, h: planmod.HoldLine, tw: planmod.TaxiwayPla
         for p in pos:
             pp = g.ensure_ccw([to_base(x, y) for x, y in p])
             hh = [g.ensure_ccw([to_base(x, y) for x, y in hole]) for hole in hol if g.point_in_poly(g.centroid(hole), p)]
-            painter.add(fg, pp, 'OTHER', False, holes=hh, kind="sphps")
+            painter.add(fg, pp, 'OTHER', False, holes=hh, kind="sphps", lift=TEXT_LIFT)
 
     half_w = tw.width / 2
     if tw.width <= ft(50):

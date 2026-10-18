@@ -699,7 +699,7 @@ def _packed_map_name(engine: str) -> str | None:
 def _maps_of_set(texture_set: str, spec: library.MaterialSpec, tex_dir: str | None, packed: str | None,
                  tex_out: str | None) -> dict[str, dict]:
     names = list(STANDARD_MAPS)
-    if spec.alpha == 'MASKED':
+    if spec.alpha in ('MASKED', 'BLEND'):
         names.append(library.MAP_OPACITY)
     if spec.metallic > 0.0:
         names.append(library.MAP_METALLIC)
