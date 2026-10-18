@@ -652,7 +652,7 @@ def _gen_paint_wear(g: Gen) -> dict:
     edges = g.worley(0.04, 1, feature="f2-f1")
     crack = g.cracks(0.3, 2, div=2, threshold=0.04, width=1.5, octaves=4, cell_edges=0.6, coverage=0.8)
     pits = _ss(0.22, 0.08, g.worley(0.006, 3))
-    field = zones * F32(0.6) + _ss(0.5, 0.05, edges) * F32(0.35) + pits * F32(0.3) + crack * F32(0.5)
+    field = zones * F32(0.6) + _ss(0.5, 0.05, edges) * F32(0.4) + pits * F32(0.35) + crack * F32(0.2)   # chips / worn zones, few spidery cracks
     field += g.fbm(0.04, 3, 4) * F32(0.15)
     worn_frac = 0.3 * a
     thr = _quantile_threshold(field, worn_frac)

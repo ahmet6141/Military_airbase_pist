@@ -262,7 +262,7 @@ def _mesh_edge_elevated(ctx, key: str, lens_a: str, lens_b: str, pads: bool):
     z_head0 = ELEV_TOP - HEAD_H
     _stem(fx, 0.0, 0.0, z_head0 + 0.01, pads)
     # head: flared skirt, tapered cast body, top cap
-    s8 = fx.seg(8)
+    s8 = fx.seg(12)
     mb.add_cylinder((0.0, 0.0), 0.045, z_head0 - 0.005, z_head0 + 0.03, s8, body, radius_top=0.072, cap_top=False)
     mb.add_cylinder((0.0, 0.0), 0.072, z_head0 + 0.03, ELEV_TOP - 0.03, s8, body, radius_top=0.066, cap_top=False)
     mb.add_cylinder((0.0, 0.0), 0.066, ELEV_TOP - 0.03, ELEV_TOP, s8, body, radius_top=0.040, cap_top=True)
@@ -389,14 +389,28 @@ def _mesh_papi(ctx, key: str, pads: bool):
     if pads:
         mb.add_box((-0.05, 0.0, PAD_H * 0.5), (0.5, dy + 0.4, PAD_H), fx.m(M_PAD), uv_tile=0.5)
     mb.add_box((0.0, 0.0, PAPI_LENS_Z), (dx, dy, dz), body, uv_tile=0.5)
-    # three lamp windows on the +X face, upper half white / lower half red
+    # three lamp windows on the +X face (upper half white / lower half red), each in a short lens hood
     xf = dx * 0.5 + 0.003
+    hood_len, wall = 0.09, 0.012
+    dark = fx.m(M_DARK)
     for cy in (-0.30, 0.0, 0.30):
         _quad_x(mb, xf, cy - 0.10, cy + 0.10, PAPI_LENS_Z, PAPI_LENS_Z + 0.085, white, 1)
         _quad_x(mb, xf, cy - 0.10, cy + 0.10, PAPI_LENS_Z - 0.085, PAPI_LENS_Z, red, 1)
-    # sun hood over the windows + rear service door outline
-    mb.add_box((dx * 0.5 + 0.05, 0.0, PAPI_LENS_Z + dz * 0.5 + 0.008), (0.14, dy + 0.02, 0.016), body, uv_tile=0.5)
-    mb.add_box((-dx * 0.5 - 0.006, 0.0, PAPI_LENS_Z), (0.012, dy * 0.7, dz * 0.7), fx.m(M_DARK), uv_tile=0.5)
+        # black lens bezel ring (thin frame flush with the face) and the projecting hood (4 plates)
+        mb.add_box((xf + 0.004, cy, PAPI_LENS_Z + 0.1), (0.008, 0.24, 0.03), dark, uv_tile=0.5)
+        mb.add_box((xf + 0.004, cy, PAPI_LENS_Z - 0.1), (0.008, 0.24, 0.03), dark, uv_tile=0.5)
+        hx = xf + hood_len * 0.5
+        mb.add_box((hx, cy, PAPI_LENS_Z + 0.115), (hood_len, 0.25, wall), body, uv_tile=0.5)      # top
+        mb.add_box((hx, cy, PAPI_LENS_Z - 0.115), (hood_len, 0.25, wall), body, uv_tile=0.5)      # bottom
+        mb.add_box((hx, cy - 0.125, PAPI_LENS_Z), (hood_len, wall, 0.24), body, uv_tile=0.5)      # sides
+        mb.add_box((hx, cy + 0.125, PAPI_LENS_Z), (hood_len, wall, 0.24), body, uv_tile=0.5)
+    # sun hood over the windows, rear service door outline, tilt-adjust cross bar between the legs
+    mb.add_box((dx * 0.5 + 0.07, 0.0, PAPI_LENS_Z + dz * 0.5 + 0.008), (0.18, dy + 0.02, 0.016), body, uv_tile=0.5)
+    mb.add_box((-dx * 0.5 - 0.006, 0.0, PAPI_LENS_Z), (0.012, dy * 0.7, dz * 0.7), dark, uv_tile=0.5)
+    mb.add_box((-0.05, 0.0, z_box0 - 0.06), (0.04, 0.62, 0.04), body, uv_tile=0.5)
+    # aiming sight tube on the roof
+    zt = PAPI_LENS_Z + dz * 0.5 + 0.03
+    _hcyl(mb, (-0.10, dy * 0.5 - 0.08, zt), (0.10, dy * 0.5 - 0.08, zt), 0.012, fx.seg(8), dark, dark, dark)
     return fx.build()
 
 

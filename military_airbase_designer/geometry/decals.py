@@ -216,7 +216,7 @@ def _at(sp: planmod.Spot, ahead: float, right_of: float) -> Point:
 
 def _apron_stains(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) -> None:
     for ap in plan.aprons:
-        heavy = ap.aircraft == 'HEAVY'
+        heavy = ap.aircraft in ('HEAVY', 'TRANSPORT')
         for sp in ap.spots:
             if rng.random() < 0.12:
                 continue                                 # a clean spot now and then
@@ -242,7 +242,7 @@ def _apron_stains(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) 
 
 def _exhaust(sheet: DecalSheet, plan: planmod.Plan, d, rng: random.Random) -> None:
     for ap in plan.aprons:
-        heavy = ap.aircraft == 'HEAVY'
+        heavy = ap.aircraft in ('HEAVY', 'TRANSPORT')
         for sp in ap.spots:
             if rng.random() < 0.2:
                 continue
