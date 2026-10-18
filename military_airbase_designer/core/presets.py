@@ -64,11 +64,34 @@ def _apply_group(pg, data: dict) -> None:
             pass
 
 
-def apply_preset(root: bpy.types.Object, identifier_or_data) -> None:
+def _reset_group(pg) -> None:
+    """Reset every property of a group to its default (presets are deltas from the defaults)."""
+    for prop in pg.bl_rna.properties:
+        if prop.identifier == "rna_type" or prop.is_readonly or prop.type in ('POINTER', 'COLLECTION'):
+            continue
+        try:
+            pg.property_unset(prop.identifier)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+
+def reset_to_defaults(root: bpy.types.Object, keep_materials: bool = True) -> None:
+    s = root.mad
+    for group in ("runway", "markings", "lighting", "signage", "structures", "perimeter", "terrain", "export") + (() if keep_materials else ("materials",)):
+        _reset_group(getattr(s, group))
+    s.taxiways.clear()
+    s.aprons.clear()
+
+
+def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True) -> None:
+    """Apply a preset. Presets are deltas on top of the defaults, so everything is reset first
+    (texture folder / engine settings are kept: they are workstation preferences, not base design)."""
     data = identifier_or_data if isinstance(identifier_or_data, dict) else load_preset(identifier_or_data)
     s = root.mad
     suspend_updates()
     try:
+        if reset:
+            reset_to_defaults(root, keep_materials=True)
         for group in ("runway", "markings", "lighting", "signage", "structures", "perimeter", "terrain", "materials", "export"):
             if group in data:
                 _apply_group(getattr(s, group), data[group])
