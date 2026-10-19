@@ -35,6 +35,7 @@ Varsayılan *Runway focus* ön ayarı, Cycles ile üretilmiş 2K dokularla (ekle
 | ![Pilot gözü: eşik, tanıtım rakamları, overrun ve bekleme çizgisi](docs/images/pilot_eye.jpg) | ![Havadan: pist, paralel taksi yolu, bağlantılar ve apron](docs/images/aerial.jpg) |
 | ![Bekleme noktası: A/B deseni, geliştirilmiş merkez hattı, yüzey tabelaları, RGL](docs/images/hold_position.jpg) | ![Gece: HIRL, eşik/son ışıkları, PAPI, taksi yolu kenar ışıkları](docs/images/night.jpg) |
 | ![Teker koyma bölgesi: lastik izi çıkartmaları ve TDZ işaretleri](docs/images/tdz_pilot.jpg) | ![L-880 PAPI kutusu: mercek başlıkları, kırılgan ayaklar, nişan borusu](docs/images/papi.jpg) |
+| ![Heliport: FATO/TLOF pedi, helitaksi yolu, park sıraları (HELI_BASE ön ayarı)](docs/images/heliport.jpg) | ![Heliport geceleyin: yeşil FATO/TLOF ışıkları, mavi helitaksi kenar ışıkları, projektör](docs/images/heliport_night.jpg) |
 
 ### Kurulum
 
@@ -107,6 +108,7 @@ Default *Runway focus* preset rendered in Cycles with the add-on's own 2K synthe
 | ![Pilot's eye: threshold, designators, overrun and hold line](docs/images/pilot_eye.jpg) | ![Aerial: runway, parallel taxiway, connectors and apron](docs/images/aerial.jpg) |
 | ![Hold position: pattern A/B, enhanced centreline, surface signs, guard lights](docs/images/hold_position.jpg) | ![Night: HIRL, threshold/end lights, PAPI, taxiway edge lights](docs/images/night.jpg) |
 | ![Touchdown zone: skid-mark decals and TDZ markings](docs/images/tdz_pilot.jpg) | ![L-880 PAPI unit: lens hoods, frangible legs, sight tube](docs/images/papi.jpg) |
+| ![Heliport: FATO/TLOF pad, helitaxiway and parking rows (HELI_BASE preset)](docs/images/heliport.jpg) | ![Heliport at night: green FATO / TLOF lights, blue helitaxiway edge lights, floodlight](docs/images/heliport_night.jpg) |
 
 ### Install
 

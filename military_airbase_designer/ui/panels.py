@@ -343,6 +343,13 @@ class MAD_PT_heliports(_SubPanel, bpy.types.Panel):
             col.prop(h, "tlof_shape")
         col.prop(h, "stands")
         col.prop(h, "heading")
+        from ..layout import heliport as heli
+        c = heli.HELI_CLASSES.get(h.hclass)
+        if c:
+            tlof = max(12.0, heli.TLOF_K * c['D'])
+            fato = max(tlof + 6.0, heli.FATO_K * c['D'])
+            box = layout.box().column(align=True)
+            box.label(text=f"D {c['D']:.1f} m | rotor {c['RD']:.1f} m | TLOF {tlof:.1f} m | FATO {fato:.1f} m", icon='INFO')
         col = layout.column(align=True)
         col.prop(h, "perimeter_lights")
         col.prop(h, "edge_lights")
