@@ -87,8 +87,10 @@ def reset_to_defaults(root: bpy.types.Object, keep_materials: bool = True) -> No
         _reset_group(getattr(s, group))
     s.taxiways.clear()
     s.aprons.clear()
+    s.heliports.clear()
     s.taxiway_index = 0
     s.apron_index = 0
+    s.heliport_index = 0
 
 
 def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True) -> None:
@@ -117,7 +119,13 @@ def apply_preset(root: bpy.types.Object, identifier_or_data, reset: bool = True)
             for item in data["aprons"]:
                 a = s.aprons.add()
                 _apply_group(a, item)
+        if "heliports" in data:
+            s.heliports.clear()
+            for item in data["heliports"]:
+                h = s.heliports.add()
+                _apply_group(h, item)
         s.taxiway_index = max(0, min(s.taxiway_index, len(s.taxiways) - 1))
+        s.heliport_index = max(0, min(s.heliport_index, len(s.heliports) - 1))
         s.apron_index = max(0, min(s.apron_index, len(s.aprons) - 1))
         s.preset_name = data.get("label", str(identifier_or_data) if not isinstance(identifier_or_data, dict) else "")
     finally:
@@ -147,6 +155,7 @@ def settings_to_dict(root: bpy.types.Object, label: str = "") -> dict:
         data[group] = _group_to_dict(getattr(s, group))
     data["taxiways"] = [_group_to_dict(t) for t in s.taxiways]
     data["aprons"] = [_group_to_dict(a) for a in s.aprons]
+    data["heliports"] = [_group_to_dict(h) for h in s.heliports]
     return data
 
 

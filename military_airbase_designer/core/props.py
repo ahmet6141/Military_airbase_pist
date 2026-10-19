@@ -129,6 +129,20 @@ APRON_KIND_ITEMS = [
     ('COMPASS', "Compass calibration pad", "Compass rose pad"),
     ('TRIM_PAD', "Engine run-up / trim pad", "Run-up pad with jet blast deflector"),
 ]
+HELI_CLASS_ITEMS = [
+    ('LIGHT', "Light (H125 / UH-1)", "Overall length D ~13 m, rotor 10.7 m"),
+    ('ATTACK', "Attack (AH-64 / T129)", "D ~17.8 m, rotor 14.6 m"),
+    ('MEDIUM', "Medium (UH-60 / T70)", "D ~19.8 m, rotor 16.4 m"),
+    ('HEAVY', "Heavy (CH-47 / CH-53)", "D ~30.2 m, rotor 18.3 m"),
+]
+TLOF_SHAPE_ITEMS = [
+    ('ROUND', "Round TLOF", "Circular touchdown pad in a square FATO (O-grid quad topology)"),
+    ('SQUARE', "Square TLOF", "Square touchdown pad in a square FATO"),
+]
+FATO_SURFACE_ITEMS = [
+    ('PAVED', "Paved FATO", "The whole final approach and take-off area is paved and marked"),
+    ('TURF', "Turf FATO", "Only the (square) TLOF is paved; a lead strip joins it to the helitaxiway"),
+]
 AIRCRAFT_CLASS_ITEMS = [
     ('FIGHTER', "Fighter (F-16 / F-35)", "Wingspan ~10-11 m"),
     ('TRAINER', "Trainer (T-38 / Hürjet)", "Wingspan ~8-10 m"),
@@ -308,6 +322,29 @@ class MAD_ApronItem(bpy.types.PropertyGroup):
     enabled: BoolProperty(name="Enabled", default=True, update=_upd)
 
 
+class MAD_HeliportItem(bpy.types.PropertyGroup):
+    name: StringProperty(name="Name", default="H1", update=_upd)
+    side: EnumProperty(name="Side", items=SIDE_ITEMS, default='LEFT', update=_upd)
+    station: FloatProperty(name="Station", description="Position of the access helitaxiway along the runway from its midpoint",
+                           default=0.0, min=-ft(12000), max=ft(12000), unit='LENGTH', update=_upd)
+    hclass: EnumProperty(name="Helicopter class", description="Design helicopter: sizes the FATO / TLOF, helitaxiways and stands",
+                         items=HELI_CLASS_ITEMS, default='MEDIUM', update=_upd)
+    tlof_shape: EnumProperty(name="TLOF shape", items=TLOF_SHAPE_ITEMS, default='ROUND', update=_upd)
+    fato_surface: EnumProperty(name="FATO surface", items=FATO_SURFACE_ITEMS, default='PAVED', update=_upd)
+    stands: IntProperty(name="Parking stands", description="Helicopter hardstands along a helitaxiway spine (0 = pad only)",
+                        default=2, min=0, max=8, update=_upd)
+    route_length: FloatProperty(name="Access route length", description="Distance from the host taxiway edge to the first junction / the FATO (0 = automatic)",
+                                default=0.0, min=0.0, max=300.0, unit='LENGTH', update=_upd)
+    heading: FloatProperty(name="H orientation", description="Rotation of the H and the touchdown marking (degrees, 0 = H upright toward the FATO)",
+                           default=0.0, min=-180.0, max=180.0, update=_upd)
+    perimeter_lights: BoolProperty(name="FATO / TLOF perimeter lights", default=True, update=_upd_light)
+    edge_lights: BoolProperty(name="Helitaxiway edge lights", default=True, update=_upd_light)
+    centerline_lights: BoolProperty(name="Helitaxiway centreline lights", default=False, update=_upd_light)
+    floodlights: BoolProperty(name="Floodlight masts", default=True, update=_upd_light)
+    windsock: BoolProperty(name="Windsock", default=True, update=_upd)
+    enabled: BoolProperty(name="Enabled", default=True, update=_upd)
+
+
 class MAD_LightingSettings(bpy.types.PropertyGroup):
     enabled: BoolProperty(name="Lighting", default=True, update=_upd_light)
     edge: EnumProperty(name="Runway edge lights", items=EDGE_LIGHT_ITEMS, default='HIRL', update=_upd_light)
@@ -440,6 +477,8 @@ class MAD_BaseSettings(bpy.types.PropertyGroup):
     taxiway_index: IntProperty(default=0)
     aprons: CollectionProperty(type=MAD_ApronItem)
     apron_index: IntProperty(default=0)
+    heliports: CollectionProperty(type=MAD_HeliportItem)
+    heliport_index: IntProperty(default=0)
     lighting: PointerProperty(type=MAD_LightingSettings)
     signage: PointerProperty(type=MAD_SignageSettings)
     structures: PointerProperty(type=MAD_StructureSettings)
@@ -478,7 +517,7 @@ class MAD_UISettings(bpy.types.PropertyGroup):
 
 
 CLASSES = (
-    MAD_RunwaySettings, MAD_MarkingSettings, MAD_DecalSettings, MAD_TaxiwayItem, MAD_ApronItem, MAD_LightingSettings,
+    MAD_RunwaySettings, MAD_MarkingSettings, MAD_DecalSettings, MAD_TaxiwayItem, MAD_ApronItem, MAD_HeliportItem, MAD_LightingSettings,
     MAD_SignageSettings, MAD_StructureSettings, MAD_PerimeterSettings, MAD_TerrainSettings,
     MAD_MaterialSettings, MAD_ExportSettings, MAD_BaseSettings, MAD_UISettings,
 )

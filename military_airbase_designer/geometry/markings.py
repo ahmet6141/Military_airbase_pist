@@ -360,6 +360,10 @@ def build(ctx) -> None:
         for ap in plan.aprons:
             _apron(painter, ap, ms, bordered(True))
 
+    # ------------------------------------------------------------------ heliports
+    for hp in plan.heliports:
+        _heliport(painter, hp, ms, bordered(True))
+
     # ------------------------------------------------------------------ roads
     if ms.road_markings:
         for road in plan.roads:
@@ -816,6 +820,9 @@ def _taxiway_edges(painter: Painter, tw: planmod.TaxiwayPlan, plan: planmod.Plan
                 x = other.parallel_junction[0]
                 tl = other.fillet_radius
                 openings[-1].append((x - other.width / 2 - tl, x + other.width / 2 + tl))
+        for hp in plan.heliports:                       # helitaxiway junctions open the far-side edge lines
+            if hp.connected and hp.side == side:
+                openings[-1].append((hp.x_c + hp.junction_u[0], hp.x_c + hp.junction_u[1]))
         for sg in (1.0, -1.0):      # sg = +1 -> toward the runway (y toward 0)
             key = 1 if sg > 0 else -1
             for off in offsets:
@@ -1113,6 +1120,108 @@ def _helipad(painter: Painter, info: dict) -> None:
     for sx in (1.0, -1.0):
         painter.add("White", tr(g.rect_xy(sx * half, -E / 2, sx * (half - D), E / 2)), 'OTHER', False, kind="helipad")
         painter.add("White", tr(g.rect_xy(-E / 2, sx * half, E / 2, sx * (half - D))), 'OTHER', False, kind="helipad")
+
+
+# =========================================================================== heliports
+HELI_H_RATIO = 0.35            # H height / TLOF size (clamped)
+HELI_FATO_DASH, HELI_FATO_GAP = 9.0, 1.5
+HELI_LINE_W = 0.30             # TLOF / FATO perimeter marking width (12 in)
+HELI_TDPM_W = 0.50             # touchdown / positioning marking circle width (ICAO >= 0.5 m)
+
+
+def _heliport(painter: Painter, hp, ms, bd: bool) -> None:
+    """FATO / TLOF markings (UFC 3-260-04 ch. 7, ICAO Annex 14 Vol II 5.3, FAA AC 150/5390-2C): white TLOF perimeter and
+    H, dashed white FATO perimeter on a paved FATO, yellow touchdown / positioning circle, helitaxiway centrelines and
+    edge lines, stand circles with lead-in lines and numbers, tie-down rings."""
+    B = hp.to_base
+    if ms.apron_markings:
+        c = hp.fato_center
+        cb = B(c)
+        t = hp.tlof
+        # ---- TLOF perimeter (continuous white, inside the pad edge)
+        if hp.tlof_shape == 'ROUND':
+            n = 96
+            painter.add_ring("White", g.circle(cb, t * 0.5, n), g.circle(cb, t * 0.5 - HELI_LINE_W, n),
+                             zone='OTHER', bordered=bd, kind="helipad")
+        else:
+            h0, h1 = t * 0.5, t * 0.5 - HELI_LINE_W
+            outer = [B((c[0] + sx * h0, c[1] + sy * h0)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+            inner = [B((c[0] + sx * h1, c[1] + sy * h1)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+            painter.add_ring("White", outer, inner, zone='OTHER', bordered=bd, kind="helipad")
+        # ---- H (up toward the FATO feeder, rotated by the item heading)
+        up = g.rotate_point((0.0, float(hp.side)), math.radians(hp.heading))
+        right = (up[1], -up[0])
+
+        def H(x: float, y: float) -> Point:
+            return (cb[0] + right[0] * x + up[0] * y, cb[1] + right[1] * x + up[1] * y)
+
+        hh = max(3.0, min(7.0, HELI_H_RATIO * t))
+        hw_ = 0.6 * hh
+        stroke = max(0.4, min(1.0, hh / 6.0))
+        for x0, x1, y0, y1 in ((-hw_ / 2, -hw_ / 2 + stroke, -hh / 2, hh / 2), (hw_ / 2 - stroke, hw_ / 2, -hh / 2, hh / 2),
+                               (-hw_ / 2 + stroke, hw_ / 2 - stroke, -stroke / 2, stroke / 2)):
+            painter.add("White", g.ensure_ccw([H(x0, y0), H(x1, y0), H(x1, y1), H(x0, y1)]), 'OTHER', bd, kind="helipad")
+        # ---- touchdown / positioning marking: yellow circle, inner diameter 0.5 D
+        r_in = 0.25 * hp.D
+        painter.add_ring("Yellow", g.circle(cb, r_in + HELI_TDPM_W, 64), g.circle(cb, r_in, 64), zone='OTHER', kind="helipad")
+        # ---- FATO perimeter: dashed white on a paved FATO
+        if hp.fato_paved:
+            fh = hp.fato * 0.5
+            hw0 = hp.w_t * 0.5 + 0.5
+            for side_i in range(4):
+                for a, b in _dashes(-fh + 1.2, fh - 1.2, HELI_FATO_DASH, HELI_FATO_GAP, centre_on=0.0):
+                    if side_i == 0 and a < hw0 and b > -hw0:         # the helitaxiway enters here
+                        continue
+                    lo, hi = fh - 0.3 - HELI_LINE_W, fh - 0.3
+                    quad = [(a, -hi), (b, -hi), (b, -lo), (a, -lo)]
+                    rot = side_i * math.pi / 2
+                    pts = [B((c[0] + x * math.cos(rot) - y * math.sin(rot), c[1] + x * math.sin(rot) + y * math.cos(rot))) for x, y in quad]
+                    painter.add("White", g.ensure_ccw(pts), 'OTHER', bd, kind="helipad")
+    # ---- helitaxiway centrelines + edge lines (yellow)
+    lw = MK.taxi_cl_w if ms.taxi_line_width == '6' else MK.taxi_cl_w_wide
+    if ms.taxiway_centerline:
+        for pl in hp.paint_lines:
+            pts = [B(p) for p in pl]
+            if hp.connected and abs(pl[0][0]) < 1e-6 and abs(pl[0][1]) < 1e-6 and hp.host_half > 0.0:
+                pts = [B((0.0, -hp.host_half))] + pts          # lead-on: join the host taxiway centreline
+            painter.add("Yellow", g.polyline_strip(pts, lw), 'OTHER', False, kind="taxi_centerline")
+    if ms.taxiway_edges:
+        ew = MK.taxi_edge_w
+        for run, inward in hp.edge_runs:
+            pts = [B((p[0] + inward[0] * ew * 1.5, p[1] + inward[1] * ew * 1.5)) for p in run]
+            if len(pts) >= 2:
+                painter.add("Yellow", g.polyline_strip(pts, ew), 'OTHER', False, kind="taxi_edge")
+    # ---- stands: positioning circle, lead-in line, boundary, number
+    if ms.apron_markings:
+        r_in = 0.25 * hp.D
+        up_b = (0.0, float(hp.side))
+        right_b = (up_b[1], -up_b[0])
+        for st in hp.stands:
+            cb = B(st.center)
+            painter.add_ring("Yellow", g.circle(cb, r_in + HELI_TDPM_W * 0.6, 48), g.circle(cb, r_in, 48), zone='OTHER', kind="helipad")
+            lead = [B(p) for p in st.lead_in]
+            # stop short of the circle
+            d = g.normalize((lead[1][0] - lead[0][0], lead[1][1] - lead[0][1]))
+            end = (lead[1][0] - d[0] * (r_in + HELI_TDPM_W * 0.6), lead[1][1] - d[1] * (r_in + HELI_TDPM_W * 0.6))
+            painter.add("Yellow", g.polyline_strip([lead[0], end], lw), 'OTHER', False, kind="lead_in")
+            m = 0.6
+            o = [B((st.u0 + m, st.v0 + m)), B((st.u1 - m, st.v0 + m)), B((st.u1 - m, st.v1 - m)), B((st.u0 + m, st.v1 - m))]
+            i_ = [B((st.u0 + m + lw, st.v0 + m + lw)), B((st.u1 - m - lw, st.v0 + m + lw)),
+                  B((st.u1 - m - lw, st.v1 - m - lw)), B((st.u0 + m + lw, st.v1 - m - lw))]
+            painter.add_ring("Yellow", o, i_, zone='OTHER', kind="apron_edge")
+            # number near the far edge, reading toward the stand from the spine
+            h_n = 1.2
+            pos, hol, width = glyphs.layout_text(st.number, 'SIGN', height=h_n, align='CENTER')
+            origin = B((st.center[0], st.v1 - m - lw - 1.0 - h_n))
+
+            def tb(gx: float, gy: float) -> Point:
+                return (origin[0] + right_b[0] * gx + up_b[0] * gy, origin[1] + right_b[1] * gx + up_b[1] * gy)
+            for p in pos:
+                painter.add("Yellow", g.ensure_ccw([tb(x, y) for x, y in p]), 'OTHER', False,
+                            holes=[g.ensure_ccw([tb(x, y) for x, y in hh]) for hh in hol if g.point_in_poly(g.centroid(hh), p)],
+                            kind="spot_number", lift=TEXT_LIFT)
+        for p in hp.tie_downs:
+            painter.add_ring("Yellow", g.circle(B(p), 0.25 + inch(3), 16), g.circle(B(p), 0.25 - inch(3), 16), zone='OTHER', kind="tie_down")
 
 
 def _compass(painter: Painter, info: dict) -> None:

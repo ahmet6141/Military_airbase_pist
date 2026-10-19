@@ -79,6 +79,26 @@ Single source of truth for *where things are*. Pure Python dataclasses, no bpy:
 Roads are separate meshes (polyline strips), 20 mm below apron level where they cross? No —
 roads never overlap aircraft pavement; crossings are marked with stop bars.
 
+### 3.2b Heliports (`layout.heliport`, `geometry.gridmesh`, `geometry.heliport`)
+`layout.heliport.plan_heliport` lays one heliport out in a local (u, v) frame (u along the host taxiway, v away
+from its far edge; `HeliportPlan.to_base` mirrors it for the right side): access helitaxiway -> optional spine with
+continuous stand rows -> feeder -> FATO square with a round or square TLOF (turf FATO: only a square TLOF plus a lead
+strip). All sizes derive from the design helicopter (`HELI_CLASSES`: D, RD, UC; rules in the module docstring).
+* **Footprint**: the pieces and fillets are registered in `plan.pavement` with zone `HELI` (terrain holes, shoulders,
+  edge skirt and signage obstacles see them); the CDT slab skips `HELI` triangles and `geometry.heliport` meshes the very
+  same polygons. The paved shoulder around a heliport is 2 m and blends back to the taxiway shoulder.
+* **Topology** (`geometry.gridmesh`): every rectangle is a tensor grid whose lines come from one *shared* breakpoint set
+  (`axis_lines`: deterministic refinement between consecutive breakpoints), so touching grids carry identical vertices
+  on the shared edge. The round TLOF is an O-grid (square core + four radial sectors, valence <= 4 away from the
+  boundary), the FATO is a loft ring between the TLOF boundary loop and the square FATO loop (same vertex count / order).
+  Junction fillets (`HeliFillet`) are one row of quads between the arc and the two straight edges, taking the vertices of
+  the neighbouring grids along the edges; the arc is paired by path length, and the footprint polygon uses the same
+  arc polyline. Result: all quads except two cusp triangles per fillet, no non-manifold edges, no T-junctions inside the
+  heliport, area equal to the polygon area (`tests/heliport_topology.py`, `tests/heliport_mesh.py`).
+* UVs are world-planar like the slab (texture continuity across the seams), `Wear` carries edge dirt + macro noise.
+* Markings (`markings._heliport`), lights (`lighting.heliports`), windsock (`plan.heli_wind_cones`, never the primary cone),
+  12 m floodlight masts.
+
 ### 3.3 `geometry.markings`
 Flat meshes 4 mm above pavement (`MARKING_Z = 0.004`), one object per colour family
 (white, yellow, red, black border) so materials stay simple and export light. Glyphs from

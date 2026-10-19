@@ -217,12 +217,14 @@ def build(ctx) -> None:
             if any(abs(yy - yd) < band and xa - DITCH_TAPER <= xx <= xb + DITCH_TAPER for yd, xa, xb in ditches):
                 continue
             extra.append((xx, yy))
-    # dirt-blend ring 3 m outside the dirt strip
+    # dirt-blend rings outside the dirt strip: the first resolves the dirt -> grass blend, the second grades the mesh
+    # outward so no long skinny triangle runs from a convex pavement corner to the far lattice (a light streak)
     for lp, is_outer in zip(dirt.outline, dirt.outline_is_outer):
         if len(lp) >= 3:
-            ring = pv.clean_loop(g.offset_loop(lp, DIRT_BLEND))
-            if len(ring) >= 3:
-                extra.extend(g.resample_polyline(ring, 8.0 / max(detail, 0.25), closed=True))
+            for dist_ring, step_ring in ((DIRT_BLEND, 8.0), (DIRT_BLEND * 2.5, 11.0)):
+                ring = pv.clean_loop(g.offset_loop(lp, dist_ring))
+                if len(ring) >= 3:
+                    extra.extend(g.resample_polyline(ring, step_ring / max(detail, 0.25), closed=True))
     # dense rows along the ditches (resolve the cosine profile + the end tapers)
     hw = DITCH_TOP_W * 0.5
     rows = (0.0, hw * 0.4, hw * 0.75, hw, hw + 2.5)

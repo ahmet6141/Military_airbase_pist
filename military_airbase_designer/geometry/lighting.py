@@ -274,12 +274,13 @@ def _mesh_edge_elevated(ctx, key: str, lens_a: str, lens_b: str, pads: bool):
     return fx.build()
 
 
-def _mesh_taxi_edge(ctx, key: str, pads: bool):
-    """L-861T omnidirectional blue taxiway edge light, 14 in top of lens (UFC §5-2; mfr)."""
+def _mesh_taxi_edge(ctx, key: str, pads: bool, lens: str = M_BLUE):
+    """L-861T omnidirectional blue taxiway edge light, 14 in top of lens (UFC §5-2; mfr). ``lens`` selects the colour
+    (green: heliport FATO perimeter light)."""
     fx = _Fx(ctx, key)
     mb = fx.mb
     body = fx.m(M_BODY)
-    blue = fx.m(M_BLUE)
+    blue = fx.m(lens)
     _stem(fx, 0.0, 0.0, 0.205, pads)
     s12 = fx.seg(12)
     mb.add_cylinder((0.0, 0.0), 0.045, 0.20, 0.235, s12, body, radius_top=0.070, cap_top=False)   # collar
@@ -430,7 +431,7 @@ def _mesh_guard_light(ctx, key: str, pads: bool):
     return fx.build()
 
 
-def _mesh_flood_mast(ctx, key: str):
+def _mesh_flood_mast(ctx, key: str, height: float = FLOOD_MAST_H):
     """Apron high-mast floodlight: 24 m tapered galvanized pole, 4 luminaires, concrete pier (UFC 3-530-01 §5-9.2)."""
     fx = _Fx(ctx, key)
     mb = fx.mb
@@ -438,7 +439,7 @@ def _mesh_flood_mast(ctx, key: str):
     dark = fx.m(M_DARK)
     flood = fx.m(M_FLOOD)
     pad = fx.m(M_PAD)
-    h = FLOOD_MAST_H
+    h = height
     mb.add_box((0.0, 0.0, 0.35), (1.3, 1.3, 0.70), pad, uv_tile=0.5)
     s12 = fx.seg(12)
     mb.add_cylinder((0.0, 0.0), 0.24, 0.70, h, s12, galv, radius_top=0.10, cap_top=False)
@@ -517,6 +518,9 @@ class _PavementIndex:
                 self._add(ap.poly)
             for poly in ap.access_polys:
                 self._add(poly)
+        for hp in plan.heliports:
+            for poly, _z in hp.pavement():
+                self._add(poly)
 
     def _add(self, poly: Sequence[Point], holes: Sequence[Sequence[Point]] = ()) -> None:
         if len(poly) < 3:
@@ -573,6 +577,9 @@ class _Lighting:
     def taxi_edge(self):
         return self.mesh("TaxiEdge", lambda k: _mesh_taxi_edge(self.ctx, k, self.pads))
 
+    def omni_green(self):
+        return self.mesh("OmniGreen", lambda k: _mesh_taxi_edge(self.ctx, k, self.pads, M_GREEN))
+
     def flasher(self):
         return self.mesh("Flasher", lambda k: _mesh_flasher(self.ctx, k, self.pads))
 
@@ -582,8 +589,10 @@ class _Lighting:
     def guard(self):
         return self.mesh("GuardLight", lambda k: _mesh_guard_light(self.ctx, k, self.pads))
 
-    def flood_mast(self):
-        return self.mesh("FloodMast", lambda k: _mesh_flood_mast(self.ctx, k))
+    def flood_mast(self, height: float = FLOOD_MAST_H):
+        if height == FLOOD_MAST_H:
+            return self.mesh("FloodMast", lambda k: _mesh_flood_mast(self.ctx, k))
+        return self.mesh(f"FloodMast_{int(round(height))}m", lambda k: _mesh_flood_mast(self.ctx, k, height))
 
     def obstruction(self):
         return self.mesh("Obstruction", lambda k: _mesh_obstruction(self.ctx, k))
@@ -972,6 +981,65 @@ class _Lighting:
                 if obs is not None:
                     self.place('Obstruction', obs, p[0], p[1], FLOOD_MAST_H + 0.30, 0.0)
 
+    # ------------------------------------------------------------------ 9b. heliports (ICAO Annex 14 Vol II ch. 5.3, FAA AC 150/5390-2C)
+    def heliports(self) -> None:
+        s = self.s
+        green = self.inpav(M_GREEN, M_GREEN)
+        for hp in self.plan.heliports:
+            B = hp.to_base
+            if hp.perimeter_lights:
+                # TLOF perimeter: flush green fixtures, <= 5 m apart, inside the white perimeter marking
+                cx, cy = hp.fato_center
+                t = hp.tlof * 0.5 - 0.65
+                if hp.tlof_shape == 'ROUND':
+                    n = max(8, 4 * int(math.ceil(2.0 * math.pi * t / 5.0 / 4.0)))
+                    pts = [(cx + t * math.cos(2.0 * math.pi * k / n), cy + t * math.sin(2.0 * math.pi * k / n)) for k in range(n)]
+                else:
+                    m = max(1, int(math.ceil(2.0 * t / 5.0)))
+                    pts = []
+                    for k in range(m):
+                        f = -t + 2.0 * t * k / m
+                        pts += [(cx + f, cy - t), (cx + t, cy + f), (cx - f, cy + t), (cx - t, cy - f)]
+                for p in pts:
+                    b = B(p)
+                    self.place('HeliTLOF', green, b[0], b[1], 0.0, 0.0)
+                # FATO perimeter: elevated green omnidirectional lights 0.4 m outside the edge, <= 7.5 m apart
+                f_h = hp.fato * 0.5 + 0.4
+                m = max(2, int(math.ceil(2.0 * f_h / 7.5)))
+                omni = self.omni_green()
+                fato_pts = []
+                for k in range(m):
+                    f = -f_h + 2.0 * f_h * k / m
+                    fato_pts += [(cx + f, cy - f_h), (cx + f_h, cy + f), (cx - f, cy + f_h), (cx - f_h, cy - f)]
+                for p in g.dedupe_points([B(p) for p in fato_pts], tol=0.5):
+                    if not self.pav.inside(p):
+                        self.place('HeliFATO', omni, p[0], p[1], 0.0, 0.0)
+            if hp.edge_lights and s.taxiway_edge:
+                mesh = self.taxi_edge()
+                hw = hp.w_t * 0.5 + 0.9
+                pts = []
+                for cl, _w in hp.strips:
+                    base_cl = [B(p) for p in cl]
+                    for sign in (1.0, -1.0):
+                        pts.extend(_edge_points(g.offset_polyline(base_cl, sign * hw), False, 15.0, 7.5))
+                for p in g.dedupe_points(pts, tol=1.5):
+                    if not self.pav.inside(p):
+                        self.place('HeliEdge', mesh, p[0], p[1], 0.0, 0.0)
+            if hp.centerline_lights:
+                for pl in hp.paint_lines:
+                    for p in g.resample_polyline([B(q) for q in pl], 15.0):
+                        if self.pav.inside(p, margin=0.2):
+                            self.place('HeliCL', green, p[0], p[1], 0.0, 0.0)
+            if s.apron_floods and hp.floodlights:
+                mast = self.flood_mast(12.0)
+                obs = self.obstruction() if s.obstruction else None
+                c = B(hp.fato_center)
+                for p in hp.floodlights:
+                    b = B(p)
+                    self.place('HeliFlood', mast, b[0], b[1], 0.0, math.atan2(c[1] - b[1], c[0] - b[0]))
+                    if obs is not None:
+                        self.place('Obstruction', obs, b[0], b[1], 12.3, 0.0)
+
     # ------------------------------------------------------------------ 10. rotating beacon head (UFC §10-1)
     def beacon(self) -> None:
         if not self.s.beacon:
@@ -1116,5 +1184,6 @@ def build(ctx) -> None:
     L.taxiways()
     L.hold_positions()
     L.aprons()
+    L.heliports()
     L.beacon()
     L.flush()

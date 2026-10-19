@@ -66,6 +66,8 @@ SHOULDER_OUTER_Z = -0.02      # shoulder drops 2 cm to its outer edge (UFC 2-3 %
 EDGE_DROP = 0.35              # vertical skirt below the outermost pavement edge (m)
 ROAD_Z = -0.01                # roads sit 1 cm under apron level so they never z-fight where they touch
 DIRT_FALLOFF = 2.5            # edge dirt band width (m)
+HELI_SHOULDER = 2.0           # paved margin around heliport pads / helitaxiways (m); eases back to the taxiway shoulder
+HELI_SHOULDER_BLEND = 8.0     # distance over which the shoulder width ramps between the two
 TINY_HOLE_AREA = 400.0        # holes in the union smaller than this are paved over (slivers, tiny islands)
 LATTICE = 20.0                # refinement lattice spacing at STANDARD (m)
 RUNWAY_LATTICE_X = 10.0       # runway lattice step along the runway (m)
@@ -590,6 +592,7 @@ def compute_footprint(plan: planmod.Plan, detail: float = 1.0) -> Footprint:
     tw_sh = max([t.shoulder for t in plan.taxiways] + [0.0])
     rw_polys = [p for p, z in plan.pavement if z in (planmod.Z_RUNWAY, planmod.Z_RUNWAY_ASPHALT, planmod.Z_OVERRUN)]
     rw_bbox = g.bbox_polys(rw_polys) if rw_polys else (0, 0, 0, 0)
+    heli_polys = [(g.bbox(poly), poly) for hp in plan.heliports for poly, _z in hp.pavement()]
     shoulder_widths: list[list[float]] = []
     for lp in loop_points:
         ws: list[float] = []
@@ -600,7 +603,15 @@ def compute_footprint(plan: planmod.Plan, detail: float = 1.0) -> Footprint:
                     if g.dist_point_poly_edge(p, poly) < 0.03:
                         on_rw = True
                         break
-            ws.append(rw.shoulder if on_rw else tw_sh)
+            w = rw.shoulder if on_rw else tw_sh
+            if heli_polys and not on_rw and w > HELI_SHOULDER:
+                d = HELI_SHOULDER_BLEND
+                for (x0, y0, x1, y1), poly in heli_polys:
+                    if x0 - d <= p[0] <= x1 + d and y0 - d <= p[1] <= y1 + d:
+                        d = min(d, g.dist_point_poly_edge(p, poly))
+                s = max(0.0, 1.0 - d / HELI_SHOULDER_BLEND)
+                w = w + (HELI_SHOULDER - w) * s
+            ws.append(w)
         shoulder_widths.append(ws)
     has_sh = any(w > 0.0 for ws in shoulder_widths for w in ws)
     shoulder = offset_band(loop_points, loop_is_outer, shoulder_widths) if has_sh else Band([], [], list(loop_points), list(loop_is_outer))
@@ -712,6 +723,8 @@ def _build_airfield(ctx, fp: Footprint) -> None:
         mb.add_vertex((p[0], p[1], rw.crown(p[0], p[1])))
     runway_zones = (planmod.Z_RUNWAY, planmod.Z_RUNWAY_ASPHALT)
     for t, m, z in zip(fp.tris, fp.mats, fp.zones):
+        if z == planmod.Z_HELI:
+            continue                      # meshed as quads by geometry.heliport
         on_rw = z in runway_zones
         cols = []
         for i in t:

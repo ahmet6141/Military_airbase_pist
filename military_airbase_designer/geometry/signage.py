@@ -761,11 +761,11 @@ class _Signage:
 
     # ------------------------------------------------------------------ 6. wind cones (UFC 10-2; L-807)
     def wind_cones(self) -> None:
-        if not self.s.wind_cones or not self.plan.wind_cones:
+        if not self.s.wind_cones or not (self.plan.wind_cones or self.plan.heli_wind_cones):
             return
         mesh = self.ctx.shared_mesh("Signage_WindCone", lambda: _mesh_wind_cone(self.ctx, "Signage_WindCone"))
-        primary = min(self.plan.wind_cones, key=lambda p: abs(p[0]))
-        for p in self.plan.wind_cones:
+        primary = min(self.plan.wind_cones, key=lambda p: abs(p[0])) if self.plan.wind_cones else None
+        for p in list(self.plan.wind_cones) + list(self.plan.heli_wind_cones):       # heliport windsocks are never primary
             is_primary = p is primary
             # the primary cone carries the segmented circle: keep the whole ring clear of pavement
             clear = SEG_CIRCLE_D * 0.5 + 3.0 if is_primary else 2.0

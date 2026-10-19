@@ -22,7 +22,7 @@ from ..core.props import resume_updates, suspend_updates
 from ..materials.library import MaterialGetter
 from . import plan as planmod
 
-MODULE_ORDER = ("pavement", "terrain", "markings", "decals", "lighting", "signage", "structures", "perimeter", "navaids")
+MODULE_ORDER = ("pavement", "heliport", "terrain", "markings", "decals", "lighting", "signage", "structures", "perimeter", "navaids")
 
 
 @dataclass
@@ -91,8 +91,8 @@ class BuildContext:
 
 
 def _import_modules():
-    from ..geometry import decals, lighting, markings, navaids, pavement, perimeter, signage, structures, terrain
-    return {"pavement": pavement, "terrain": terrain, "markings": markings, "decals": decals, "lighting": lighting,
+    from ..geometry import decals, heliport, lighting, markings, navaids, pavement, perimeter, signage, structures, terrain
+    return {"pavement": pavement, "heliport": heliport, "terrain": terrain, "markings": markings, "decals": decals, "lighting": lighting,
             "signage": signage, "structures": structures, "perimeter": perimeter, "navaids": navaids}
 
 

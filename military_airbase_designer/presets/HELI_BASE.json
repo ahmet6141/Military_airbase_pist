@@ -1,0 +1,157 @@
+{
+  "label": "Helicopter base (army aviation: 5,000 x 100 ft runway, two heliports with parking stands)",
+  "base_name": "Airbase",
+  "icao_code": "LTXH",
+  "runway": {
+    "length": 1524.0,
+    "width": 30.48,
+    "heading": 90.0,
+    "runway_class": "A",
+    "surface": "ASPHALT",
+    "slab_size": 6.096,
+    "crown_percent": 1.5,
+    "shoulder_width": 3.048,
+    "shoulder_type": "PAVED",
+    "overrun_type": "PAVED",
+    "overrun_length": 60.96,
+    "arresting_type": "NONE",
+    "arresting_distance": 457.2,
+    "ils_low": false,
+    "ils_high": false,
+    "elevation": 304.8
+  },
+  "markings": {
+    "standard": "UFC",
+    "leading_zero": true,
+    "taxi_line_width": "6",
+    "hold_line_width": "6"
+  },
+  "taxiways": [
+    {
+      "name": "A",
+      "kind": "PARALLEL",
+      "side": "LEFT",
+      "width": 15.24,
+      "shoulder_width": 3.048,
+      "fillet_radius": 18.288,
+      "station": 0.0,
+      "offset": 160.02
+    },
+    {
+      "name": "A1",
+      "kind": "END",
+      "side": "LEFT",
+      "width": 15.24,
+      "shoulder_width": 3.048,
+      "fillet_radius": 18.288,
+      "station": -1.0
+    },
+    {
+      "name": "A2",
+      "kind": "CONNECTOR",
+      "side": "LEFT",
+      "width": 15.24,
+      "shoulder_width": 3.048,
+      "fillet_radius": 18.288,
+      "station": 0.0
+    },
+    {
+      "name": "A3",
+      "kind": "END",
+      "side": "LEFT",
+      "width": 15.24,
+      "shoulder_width": 3.048,
+      "fillet_radius": 18.288,
+      "station": 1.0
+    }
+  ],
+  "aprons": [
+    {
+      "name": "Fixed-wing apron",
+      "kind": "MAIN",
+      "side": "LEFT",
+      "station": 0.0,
+      "length": 121.92,
+      "depth": 91.44,
+      "aircraft": "TRAINER",
+      "rows": 2
+    }
+  ],
+  "lighting": {
+    "edge": "MIRL",
+    "als_low": "NONE",
+    "als_high": "NONE",
+    "papi": false,
+    "papi_side": "LEFT",
+    "centerline": false,
+    "tdz": false
+  },
+  "signage": {
+    "sign_size": 3
+  },
+  "structures": {
+    "has_style": "NATO3",
+    "has_layout": "LOOP",
+    "hangars": 3,
+    "control_tower": true,
+    "tower_height": 32.0,
+    "fuel_farm": true,
+    "fuel_tanks": 2,
+    "munitions": false,
+    "igloos": 6,
+    "hush_house": false,
+    "large_hangar": false,
+    "wash_rack": true
+  },
+  "perimeter": {
+    "fence": true,
+    "double_fence": true,
+    "patrol_road": true,
+    "entry_control_point": true,
+    "guard_towers": true
+  },
+  "terrain": {
+    "ditches": true,
+    "mowing_stripes": true
+  },
+  "materials": {
+    "resolution": "2048",
+    "engine": "UNREAL"
+  },
+  "heliports": [
+    {
+      "name": "H1",
+      "side": "LEFT",
+      "station": -420.0,
+      "hclass": "MEDIUM",
+      "tlof_shape": "ROUND",
+      "fato_surface": "PAVED",
+      "stands": 6,
+      "route_length": 0.0,
+      "heading": 0.0,
+      "perimeter_lights": true,
+      "edge_lights": true,
+      "centerline_lights": false,
+      "floodlights": true,
+      "windsock": true,
+      "enabled": true
+    },
+    {
+      "name": "H2",
+      "side": "LEFT",
+      "station": 400.0,
+      "hclass": "ATTACK",
+      "tlof_shape": "ROUND",
+      "fato_surface": "PAVED",
+      "stands": 4,
+      "route_length": 0.0,
+      "heading": 0.0,
+      "perimeter_lights": true,
+      "edge_lights": true,
+      "centerline_lights": false,
+      "floodlights": true,
+      "windsock": true,
+      "enabled": true
+    }
+  ]
+}

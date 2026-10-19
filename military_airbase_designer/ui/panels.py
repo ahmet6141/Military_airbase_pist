@@ -309,6 +309,48 @@ class MAD_PT_aprons(_SubPanel, bpy.types.Panel):
         col.prop(a, "blast_deflector")
 
 
+# =========================================================================== heliports
+class MAD_PT_heliports(_SubPanel, bpy.types.Panel):
+    bl_label = "Heliports & Helitaxiways"
+    bl_idname = "MAD_PT_heliports"
+
+    def draw(self, context):
+        layout = self.layout
+        s = self.settings(context)
+        row = layout.row()
+        row.template_list("MAD_UL_heliports", "", s, "heliports", s, "heliport_index", rows=3)
+        col = row.column(align=True)
+        col.operator("mad.heliport_add", text="", icon='ADD')
+        col.operator("mad.heliport_remove", text="", icon='REMOVE')
+        col.separator()
+        col.operator("mad.heliport_duplicate", text="", icon='DUPLICATE')
+        col.separator()
+        col.operator("mad.heliport_move", text="", icon='TRIA_UP').direction = 'UP'
+        col.operator("mad.heliport_move", text="", icon='TRIA_DOWN').direction = 'DOWN'
+        if not s.heliports or s.heliport_index >= len(s.heliports):
+            return
+        h = s.heliports[s.heliport_index]
+        layout = self.prep()
+        col = layout.column(align=True)
+        col.prop(h, "name")
+        col.prop(h, "side")
+        col.prop(h, "station")
+        col.prop(h, "route_length")
+        col = layout.column(align=True)
+        col.prop(h, "hclass")
+        col.prop(h, "fato_surface")
+        if h.fato_surface == 'PAVED':
+            col.prop(h, "tlof_shape")
+        col.prop(h, "stands")
+        col.prop(h, "heading")
+        col = layout.column(align=True)
+        col.prop(h, "perimeter_lights")
+        col.prop(h, "edge_lights")
+        col.prop(h, "centerline_lights")
+        col.prop(h, "floodlights")
+        col.prop(h, "windsock")
+
+
 # =========================================================================== lighting
 class MAD_PT_lighting(_SubPanel, bpy.types.Panel):
     bl_label = "Lighting"
@@ -545,7 +587,7 @@ def _add_menu(self, context):
     self.layout.operator("mad.create_base", text="Military Airbase", icon='AUTO')
 
 
-CLASSES = (MAD_PT_main, MAD_PT_runway, MAD_PT_markings, MAD_PT_decals, MAD_PT_taxiways, MAD_PT_aprons, MAD_PT_lighting,
+CLASSES = (MAD_PT_main, MAD_PT_runway, MAD_PT_markings, MAD_PT_decals, MAD_PT_taxiways, MAD_PT_aprons, MAD_PT_heliports, MAD_PT_lighting,
            MAD_PT_signage, MAD_PT_structures, MAD_PT_perimeter, MAD_PT_materials, MAD_PT_export, MAD_PT_help)
 
 

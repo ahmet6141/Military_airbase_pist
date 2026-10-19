@@ -21,10 +21,10 @@ import bpy
 
 _MODULE_NAMES = (
     "core.units", "core.constants", "core.geom2d", "core.meshbuild", "core.scene_utils", "core.props",
-    "core.rebuild", "core.presets", "layout.plan", "layout.builder",
+    "core.rebuild", "core.presets", "layout.heliport", "layout.plan", "layout.builder",
     "materials.library", "materials.nodes",
     "textures.noise", "textures.synth", "textures.io",
-    "geometry.glyphs", "geometry.pavement", "geometry.terrain", "geometry.markings", "geometry.decals", "geometry.lighting",
+    "geometry.glyphs", "geometry.gridmesh", "geometry.pavement", "geometry.heliport", "geometry.terrain", "geometry.markings", "geometry.decals", "geometry.lighting",
     "geometry.signage", "geometry.structures", "geometry.perimeter", "geometry.navaids",
     "ops.build_ops", "ops.list_ops", "ops.preset_ops", "ops.texture_ops", "ops.export_ops",
     "ui.lists", "ui.panels", "i18n.translations", "prefs",

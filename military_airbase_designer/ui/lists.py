@@ -1,4 +1,4 @@
-"""UI lists for the taxiway and apron collections."""
+"""UI lists for the taxiway, apron and heliport collections."""
 import bpy
 
 TAXIWAY_ICONS = {
@@ -57,7 +57,22 @@ class MAD_UL_aprons(bpy.types.UIList):
             layout.label(text=item.name, icon=APRON_ICONS.get(item.kind, 'DOT'))
 
 
-CLASSES = (MAD_UL_taxiways, MAD_UL_aprons)
+class MAD_UL_heliports(bpy.types.UIList):
+    bl_idname = "MAD_UL_heliports"
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, "name", text="", emboss=False, icon='MESH_CIRCLE')
+            row.label(text=_enum_label(item, "hclass"))
+            row.label(text="L" if item.side == 'LEFT' else "R")
+            row.prop(item, "enabled", text="", icon='HIDE_OFF' if item.enabled else 'HIDE_ON', emboss=False)
+        else:
+            layout.alignment = 'CENTER'
+            layout.label(text=item.name, icon='MESH_CIRCLE')
+
+
+CLASSES = (MAD_UL_taxiways, MAD_UL_aprons, MAD_UL_heliports)
 
 
 def register():

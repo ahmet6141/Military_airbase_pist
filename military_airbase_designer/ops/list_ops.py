@@ -1,4 +1,4 @@
-"""Add / remove / move / duplicate operators for the taxiway and apron lists."""
+"""Add / remove / move / duplicate operators for the taxiway, apron and heliport lists."""
 from __future__ import annotations
 
 import bpy
@@ -281,8 +281,116 @@ class MAD_OT_apron_duplicate(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# --------------------------------------------------------------------------- heliports
+class MAD_OT_heliport_add(bpy.types.Operator):
+    bl_idname = "mad.heliport_add"
+    bl_label = "Add Heliport"
+    bl_description = "Add a heliport: FATO / TLOF pad, helitaxiway and parking stands"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return active_root(context) is not None
+
+    def execute(self, context):
+        root = active_root(context)
+        s = root.mad
+        suspend_updates()
+        try:
+            h = s.heliports.add()
+            h.name = f"H{len(s.heliports)}"
+            par = next((x for x in s.taxiways if x.kind == 'PARALLEL'), None)
+            h.side = par.side if par else 'LEFT'
+            taken = sorted(x.station for x in s.heliports if x is not h and x.side == h.side)
+            h.station = ft(2500) if not taken else taken[-1] + ft(500)
+            s.heliport_index = len(s.heliports) - 1
+        finally:
+            resume_updates()
+        _after_change(context, root)
+        return {'FINISHED'}
+
+
+class MAD_OT_heliport_remove(bpy.types.Operator):
+    bl_idname = "mad.heliport_remove"
+    bl_label = "Remove Heliport"
+    bl_description = "Remove the selected heliport"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        root = active_root(context)
+        return root is not None and 0 <= root.mad.heliport_index < len(root.mad.heliports)
+
+    def execute(self, context):
+        root = active_root(context)
+        s = root.mad
+        suspend_updates()
+        try:
+            s.heliports.remove(s.heliport_index)
+            s.heliport_index = max(0, min(s.heliport_index, len(s.heliports) - 1))
+        finally:
+            resume_updates()
+        _after_change(context, root)
+        return {'FINISHED'}
+
+
+class MAD_OT_heliport_duplicate(bpy.types.Operator):
+    bl_idname = "mad.heliport_duplicate"
+    bl_label = "Duplicate Heliport"
+    bl_description = "Duplicate the selected heliport further along the runway"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        root = active_root(context)
+        return root is not None and 0 <= root.mad.heliport_index < len(root.mad.heliports)
+
+    def execute(self, context):
+        root = active_root(context)
+        s = root.mad
+        src = s.heliports[s.heliport_index]
+        suspend_updates()
+        try:
+            h = s.heliports.add()
+            for prop in src.bl_rna.properties:
+                if prop.identifier in ('rna_type',) or prop.is_readonly:
+                    continue
+                setattr(h, prop.identifier, getattr(src, prop.identifier))
+            h.name = f"H{len(s.heliports)}"
+            h.station = src.station + ft(600) + (src.stands + 1) * 40.0
+            s.heliport_index = len(s.heliports) - 1
+        finally:
+            resume_updates()
+        _after_change(context, root)
+        return {'FINISHED'}
+
+
+class MAD_OT_heliport_move(bpy.types.Operator):
+    bl_idname = "mad.heliport_move"
+    bl_label = "Move Heliport"
+    bl_description = "Move the selected heliport up or down in the list"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    direction: EnumProperty(items=[('UP', "Up", ""), ('DOWN', "Down", "")], default='UP')
+
+    @classmethod
+    def poll(cls, context):
+        root = active_root(context)
+        return root is not None and len(root.mad.heliports) > 1
+
+    def execute(self, context):
+        s = active_root(context).mad
+        i = s.heliport_index
+        j = i - 1 if self.direction == 'UP' else i + 1
+        if 0 <= j < len(s.heliports):
+            s.heliports.move(i, j)
+            s.heliport_index = j
+        return {'FINISHED'}
+
+
 CLASSES = (MAD_OT_taxiway_add, MAD_OT_taxiway_remove, MAD_OT_taxiway_move, MAD_OT_taxiway_duplicate,
-           MAD_OT_apron_add, MAD_OT_apron_remove, MAD_OT_apron_move, MAD_OT_apron_duplicate)
+           MAD_OT_apron_add, MAD_OT_apron_remove, MAD_OT_apron_move, MAD_OT_apron_duplicate,
+           MAD_OT_heliport_add, MAD_OT_heliport_remove, MAD_OT_heliport_move, MAD_OT_heliport_duplicate)
 
 
 def register():

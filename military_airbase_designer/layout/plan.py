@@ -13,6 +13,7 @@ from typing import Any
 
 from ..core import geom2d as g
 from ..core.units import ft
+from . import heliport as heli
 
 Point = g.Point
 Poly = g.Poly
@@ -26,8 +27,10 @@ Z_APRON = "APRON"
 Z_PAD = "PAD"              # small pads (helipad, compass, hot cargo) — concrete
 Z_SHOULDER = "SHOULDER"
 Z_ROAD = "ROAD"
+Z_HELI = heli.Z_HELI       # heliport pieces: part of the footprint, meshed as quads by geometry.heliport
 
-ZONE_PRIORITY = {Z_RUNWAY: 100, Z_RUNWAY_ASPHALT: 99, Z_OVERRUN: 90, Z_APRON: 80, Z_PAD: 79, Z_TAXIWAY: 70, Z_SHOULDER: 10, Z_ROAD: 5}
+ZONE_PRIORITY = {Z_RUNWAY: 100, Z_RUNWAY_ASPHALT: 99, Z_OVERRUN: 90, Z_HELI: 85, Z_APRON: 80, Z_PAD: 79, Z_TAXIWAY: 70,
+                 Z_SHOULDER: 10, Z_ROAD: 5}
 
 # --------------------------------------------------------------------------- aircraft data (UFC 3-260-01 Table 6-1 style)
 AIRCRAFT = {
@@ -237,6 +240,8 @@ class Plan:
     warnings: list[str] = field(default_factory=list)
     wind_cones: list[Point] = field(default_factory=list)
     navaids: list[StructurePlan] = field(default_factory=list)
+    heliports: list["heli.HeliportPlan"] = field(default_factory=list)
+    heli_wind_cones: list[Point] = field(default_factory=list)
 
     def parallel_taxiway(self, side: int) -> TaxiwayPlan | None:
         best = None
@@ -528,6 +533,20 @@ def build_plan(s) -> Plan:
         aprons.append(ap)
         structures.extend(ap.structures)
 
+    # ---------------------------------------------------------------- heliports
+    heliports: list[heli.HeliportPlan] = []
+    for k, it in enumerate(getattr(s, "heliports", [])):
+        if not it.enabled:
+            continue
+        side = _side(it.side)
+        y_host, connected, host_half = heli.host_for(taxiways, hold_setback, hw, side)
+        if not connected:
+            warnings.append(f"Heliport {it.name}: no parallel taxiway on its side, it is built unconnected.")
+        xc = max(-hl - 60.0, min(hl + 60.0, it.station))
+        hp = heli.plan_heliport(it, k, xc, y_host, side, connected)
+        hp.host_half = host_half
+        heliports.append(hp)
+
     # ---------------------------------------------------------------- bounds (airfield core)
     pav: list[tuple[Poly, str]] = list(runway.zones)
     for tw in taxiways:
@@ -537,12 +556,15 @@ def build_plan(s) -> Plan:
         pav.append((ap.poly, ap.zone))
         for p in ap.access_polys:
             pav.append((p, Z_TAXIWAY))
+    for hp in heliports:
+        pav.extend(hp.pavement())
     x0, y0, x1, y1 = g.bbox_polys([p for p, _ in pav])
 
     # ---------------------------------------------------------------- base structures & navaids
     plan = Plan(runway=runway, taxiways=taxiways, aprons=aprons, roads=[], structures=structures, fence=None,
                 airside=airside, bounds=(x0, y0, x1, y1), site_bounds=(x0, y0, x1, y1), hold_setback=hold_setback,
-                settings=s, pavement=pav, warnings=warnings)
+                settings=s, pavement=pav, warnings=warnings, heliports=heliports)
+    plan.heli_wind_cones = [hp.to_base(hp.windsock) for hp in heliports if hp.windsock is not None]
     _place_structures(plan, s)
     _place_navaids(plan, s)
     _place_perimeter(plan, s)
@@ -1010,6 +1032,36 @@ def _place_perimeter(plan: Plan, s) -> None:
                 r.stop_bars.append(((gx, yr + side * 8.0), (0.0, -float(side))))
 
 
+def _validate_heliports(plan: Plan) -> None:
+    """Heliport pieces must not overlap other pavement or each other (the quad meshes would double up)."""
+    others: list[tuple[Poly, str]] = [(p, "the runway") for p, _z in plan.runway.zones]
+    for tw in plan.taxiways:
+        others.extend((p, f"taxiway {tw.name}") for p in tw.polys)
+    for ap in plan.aprons:
+        others.append((ap.poly, f"apron {ap.name}"))
+        others.extend((p, f"apron {ap.name}") for p in ap.access_polys)
+    boxes = [(g.bbox(p), p, n) for p, n in others]
+    for i, hp in enumerate(plan.heliports):
+        mine = [hp.poly_base(pc.poly()) for pc in hp.pieces]
+        if hp.fato_paved:
+            mine.append(hp.poly_base(hp.fato_poly()))
+        hit: set[str] = set()
+        for poly in mine:
+            x0, y0, x1, y1 = g.bbox(poly)
+            nx, ny = max(2, int((x1 - x0) / 2.5)), max(2, int((y1 - y0) / 2.5))
+            for a in range(nx):
+                for b in range(ny):
+                    pt = (x0 + (a + 0.5) * (x1 - x0) / nx, y0 + (b + 0.5) * (y1 - y0) / ny)
+                    for (bx0, by0, bx1, by1), op, name in boxes:
+                        if bx0 <= pt[0] <= bx1 and by0 <= pt[1] <= by1 and g.point_in_poly(pt, op):
+                            hit.add(name)
+                    for j, other in enumerate(plan.heliports):
+                        if j != i and (j < i) and any(g.point_in_poly(pt, hp2.poly_base(pc.poly())) for hp2 in [other] for pc in other.pieces):
+                            hit.add(f"heliport {other.name}")
+        if hit:
+            plan.warnings.append(f"Heliport {hp.name} overlaps {', '.join(sorted(hit))}: move it along the runway or change its stand count.")
+
+
 def _validate(plan: Plan, s) -> None:
     rw = plan.runway
     L = rw.length
@@ -1048,6 +1100,7 @@ def _validate(plan: Plan, s) -> None:
         gap = b.parallel_junction[0] - a.parallel_junction[0]
         if a.side == b.side and abs(gap) < 2.5 * max(a.width, b.width):
             plan.warnings.append(f"Taxiways {a.name} and {b.name} join the parallel taxiway only {abs(gap):.0f} m apart.")
+    _validate_heliports(plan)
     if any(a.kind == 'HOT_CARGO' for a in plan.aprons) and any(a.kind == 'MAIN' for a in plan.aprons):
         hc = next(a for a in plan.aprons if a.kind == 'HOT_CARGO')
         mn = next(a for a in plan.aprons if a.kind == 'MAIN')
